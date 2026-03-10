@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 namespace BBKRPGSimulator.Lib
 {
@@ -56,6 +57,7 @@ namespace BBKRPGSimulator.Lib
             Type = buf[offset];
             Index = buf[offset + 1];
             Description = buf.GetString(offset + 2);
+            UnityEngine.Debug.Log("Description:" + Description);
             Length = (((int)buf[offset + 0x19] & 0xFF) << 8)
                     | ((int)buf[offset + 0x18] & 0xFF);
             NumSceneEvent = (int)buf[offset + 0x1a] & 0xFF;
@@ -69,6 +71,19 @@ namespace BBKRPGSimulator.Lib
             ScriptData = new byte[len];
 
             Array.Copy(buf, offset + 0x1b + (NumSceneEvent * 2), ScriptData, 0, len);
+
+            //File.WriteAllBytes(UnityEngine.Application.streamingAssetsPath + "/" +Type+"-"+ Index + ".gut", ScriptData);
+
+            // 计算完整资源块长度（头部 + 数据段）
+            int totalLen = 0x1b + NumSceneEvent * 2 + len;
+
+            // 从原始 buf 复制完整块，避免被其他资源的解析污染
+            byte[] rawBlock = new byte[totalLen];
+            Array.Copy(buf, offset, rawBlock, 0, totalLen);
+
+            string savePath = UnityEngine.Application.streamingAssetsPath
+                            + $"/{Type}-{Index}.gut";
+            File.WriteAllBytes(savePath, rawBlock);
         }
 
         #endregion 方法
