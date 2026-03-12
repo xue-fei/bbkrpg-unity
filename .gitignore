@@ -16,3 +16,4 @@ Assets/StreamingAssets/build_info.meta
 ProjectSettings/boot.config
 *.dwlt
 Build/
+ExRes/
