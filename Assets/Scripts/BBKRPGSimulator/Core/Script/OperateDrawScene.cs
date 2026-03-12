@@ -3,32 +3,32 @@ using BBKRPGSimulator.Graphics;
 namespace BBKRPGSimulator.Script
 {
     /// <summary>
-    /// »æÖÆÒ»´ÎµÄ²Ù×÷£¿
+    /// ç»˜åˆ¶ä¸€æ¬¡çš„æ“ä½œï¼Ÿ
     /// </summary>
     internal abstract class OperateDrawScene : Operate
     {
-        #region ×Ö¶Î
+        #region å­—æ®µ
 
         /// <summary>
-        /// »æÖÆ¼ÆÊı
+        /// ç»˜åˆ¶è®¡æ•°
         /// </summary>
         private int _drawCount = 0;
 
-        #endregion ×Ö¶Î
+        #endregion å­—æ®µ
 
-        #region ¹¹Ôìº¯Êı
+        #region æ„é€ å‡½æ•°
 
         /// <summary>
-        /// »æÖÆÒ»´ÎµÄ²Ù×÷£¿
+        /// ç»˜åˆ¶ä¸€æ¬¡çš„æ“ä½œï¼Ÿ
         /// </summary>
         /// <param name="context"></param>
         public OperateDrawScene(SimulatorContext context) : base(context)
         {
         }
 
-        #endregion ¹¹Ôìº¯Êı
+        #endregion æ„é€ å‡½æ•°
 
-        #region ·½·¨
+        #region æ–¹æ³•
 
         public override void Draw(ICanvas canvas)
         {
@@ -51,6 +51,6 @@ namespace BBKRPGSimulator.Script
             return true;
         }
 
-        #endregion ·½·¨
+        #endregion æ–¹æ³•
     }
 }
