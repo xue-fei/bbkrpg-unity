@@ -92,7 +92,7 @@ public class GutCompiler
         gb2312 = new CP936();
 
         string srcDir = Application.dataPath + "/../ExRes/gut_src";
-        string outDir = Application.dataPath + "/../ExRes/gut";
+        string outDir = Application.dataPath + "/../ExRes/gut_test";
 
         if (!Directory.Exists(srcDir))
         {
@@ -136,18 +136,17 @@ public class GutCompiler
 
         string[] lines = File.ReadAllLines(txtPath, gb2312);
 
-        // ── 第一遍：提取 @desc / @event 元数据 ───────────────
-        string description = "";
+        // ── 第一遍：删除 @开头的注释 ─────────────── 
         var sceneEvents = new List<int>();
 
-        foreach (string line in lines)
+        for (int i = 0; i < lines.Length; i++)
         {
+            var line = lines[i];
             string t = line.Trim();
-            if (t.StartsWith("@desc ", StringComparison.OrdinalIgnoreCase))
-                description = t.Substring(6).Trim();
-            else if (t.StartsWith("@event ", StringComparison.OrdinalIgnoreCase))
-                if (int.TryParse(t.Substring(7).Trim(), out int ev))
-                    sceneEvents.Add(ev);
+            if (t.StartsWith("@"))
+            {
+                lines[i] = "";
+            }
         }
 
         // ── 第二遍：编译指令字节流（两遍处理 goto/if 标签） ──
@@ -191,7 +190,6 @@ public class GutCompiler
 
         // ── 组装 GUT 文件头 ───────────────────────────────────
         byte[] scriptBytes = script.ToArray();
-        byte[] descBytes = EncodeDescription(description);
         int length = sceneEvents.Count * 2 + 3 + scriptBytes.Length;
 
         using var ms = new MemoryStream();
@@ -199,7 +197,6 @@ public class GutCompiler
 
         w.Write((byte)fileType);
         w.Write((byte)fileIndex);
-        w.Write(descBytes);                              // 23字节
         w.Write((byte)(length & 0xFF));                 // Length lo
         w.Write((byte)((length >> 8) & 0xFF));          // Length hi
         w.Write((byte)sceneEvents.Count);               // NumSceneEvent
