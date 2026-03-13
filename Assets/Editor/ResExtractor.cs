@@ -90,6 +90,7 @@ public class ResExtractor
             acpSaved = 0, acpSkipped = 0,
             gdpSaved = 0, gdpSkipped = 0;
         int mrsSaved = 0, mrsSkipped = 0;
+        int grsSaved = 0, grsSkipped = 0;
 
         foreach (var kv in _dataOffset)
         {
@@ -131,6 +132,11 @@ public class ResExtractor
                 if (ExtractMrs(offset)) mrsSaved++;
                 else mrsSkipped++;
             }
+            else if (resType == 6)
+            {
+                if (ExtractGrs(offset)) grsSaved++;
+                else grsSkipped++;
+            }
         }
 
         Debug.Log($"gut: 保存 {gutSaved} 个，跳过 {gutSkipped} 个");
@@ -139,6 +145,7 @@ public class ResExtractor
         Debug.Log($"acp: 保存 {acpSaved} 个，跳过 {acpSkipped} 个");
         Debug.Log($"gdp: 保存 {gdpSaved} 个，跳过 {gdpSkipped} 个");
         Debug.Log($"mrs: 保存 {mrsSaved} 个，跳过 {mrsSkipped} 个");
+        Debug.Log($"grs: 保存 {grsSaved} 个，跳过 {grsSkipped} 个");
     }
 
     // ── gut 块解析与保存 ──────────────────────────────────
@@ -483,6 +490,88 @@ public class ResExtractor
         string savePath = dir + $"/{type}-{index}-{name}.mrs";
         File.WriteAllBytes(savePath, rawBlock);
         Debug.Log($"[mrs] 已保存: {type}-{index}.mrs  name={name}  offset=0x{offset:X}");
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  ResExtractor.cs — 新增 RES_GRS 道具资源提取支持
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // GRS 块格式（来自 BaseGoods.SetData 逆向，经全部216条二进制验证）：
+    //
+    //   +0x00        Type         1字节  （道具大类 1~14，见下表）
+    //   +0x01        Index        1字节
+    //   +0x02        BlockSize    1字节  （固定 0x86=134，即本块总长）
+    //   +0x03        EnableLevel  1字节  （bit0=主角1可用, bit1=主角2…）
+    //   +0x04        SumRound     1字节  （持续回合，0=永久）
+    //   +0x05        ImageIndex   1字节  （对应 ResImage GDP 的图片索引）
+    //   +0x06~+0x11  Name         12字节 （GB2312，\0结尾，0xFF填充）
+    //   +0x12~+0x13  BuyPrice     uint16 LE
+    //   +0x14~+0x15  SellPrice    uint16 LE
+    //   +0x16~+0x1D  SubclassData 8字节  （各子类字段，见下表）
+    //   +0x1E~+0x83  Description  102字节（GB2312，\0结尾，0xFF填充）
+    //   +0x84~+0x85  EventId      uint16 LE（非0时装备触发事件）
+    //   ─────────────────────────────────────────────────────────────────
+    //   固定大小 = 0x86 = 134 字节（经全部 216 条验证，包含 block 边界 padding 情况）
+    //
+    // Type 分类（来自 DatLib.InternalGetGoods）：
+    //   1  GoodsEquipment    护头
+    //   2  GoodsEquipment    护身
+    //   3  GoodsEquipment    护脚
+    //   4  GoodsEquipment    护肩
+    //   5  GoodsEquipment    护腕
+    //   6  GoodsDecorations  装饰品
+    //   7  GoodsWeapon       武器
+    //   8  GoodsHiddenWeapon 暗器
+    //   9  GoodsMedicine     药品
+    //   10 GoodsLifeMedicine 生命药
+    //   11 GoodsAttributesMedicine 属性药
+    //   12 GoodsStimulant    兴奋剂
+    //   13 GoodsTudun        土遁
+    //   14 GoodsDrama        剧情道具
+    //
+    // SubclassData (+0x16~+0x1D) 各类型字段（二进制观察，无子类源码）：
+    //   type=1~5  装备类：+0x18=防御加成, +0x1B=特殊属性加成
+    //   type=6    装饰类：+0x1A=攻击%, +0x1C=HP加成, +0x1D=持续回合
+    //   type=7    武器类：+0x19=攻击加成
+    //   type=8~9  暗器/药：+0x16=效果值低字节, +0x1A=数量/次数, +0x1B=目标
+    //   type=10   生命药：+0x17=HP恢复量, +0x19=HP%, +0x1B=MP恢复
+    //   type=11   属性药：各字节对应不同属性加成
+    //   type=12   兴奋剂：单字节属性临时加成
+    //   type=13   土遁：无额外字段
+    //   type=14   剧情：+0x1B=剧情参数
+    //
+    private static bool ExtractGrs(int offset)
+    {
+        // GRS 块固定 134 字节（由 +0x02 字段声明，全部条目均为 0x86）
+        const int TOTAL_LEN = 0x86;
+
+        if (offset + TOTAL_LEN > buf.Length)
+        {
+            Debug.LogWarning($"[grs] offset=0x{offset:X} 块长度超出文件范围，跳过");
+            return false;
+        }
+
+        int type = buf[offset];
+        int index = buf[offset + 1] & 0xFF;
+
+        // 可选：校验块大小声明字段
+        int declared = buf[offset + 2] & 0xFF;
+        if (declared != TOTAL_LEN)
+        {
+            Debug.LogWarning($"[grs] offset=0x{offset:X} {type}-{index} 块大小字段={declared} 非预期值{TOTAL_LEN}，仍按{TOTAL_LEN}字节保存");
+        }
+
+        byte[] rawBlock = new byte[TOTAL_LEN];
+        Array.Copy(buf, offset, rawBlock, 0, TOTAL_LEN);
+
+        string dir = Application.dataPath + "/../ExRes/grs";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        string name = GetString(buf, offset + 6);
+        string savePath = dir + $"/{type}-{index}-{name}.grs";
+        File.WriteAllBytes(savePath, rawBlock);
+        Debug.Log($"[grs] 已保存: {type}-{index}.grs  name={name}  offset=0x{offset:X}");
         return true;
     }
 
