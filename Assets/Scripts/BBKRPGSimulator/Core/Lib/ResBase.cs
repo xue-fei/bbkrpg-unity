@@ -50,7 +50,7 @@ namespace BBKRPGSimulator.Lib
         /// <param name="buf">资源的数据缓冲区</param>
         /// <param name="offset">该资源在数组buf中的偏移位置，offset为该资源的首字节</param>
         public abstract void SetData(byte[] buf, int offset);
-
+          
         #region 重写Equals
 
         /// <summary>

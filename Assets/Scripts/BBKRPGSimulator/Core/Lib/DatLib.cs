@@ -17,14 +17,44 @@ namespace BBKRPGSimulator.Lib
         #region 字段
 
         /// <summary>
-        /// 角色图片
+        /// 剧情脚本
         /// </summary>
-        public const int RES_ACP = 8;
+        public const int RES_GUT = 1;
+
+        /// <summary>
+        /// 地图资源
+        /// </summary>
+        public const int RES_MAP = 2;
 
         /// <summary>
         /// 角色资源
         /// </summary>
         public const int RES_ARS = 3;
+
+        /// <summary>
+        /// 魔法资源
+        /// </summary>
+        public const int RES_MRS = 4;
+
+        /// <summary>
+        /// 特效资源
+        /// </summary>
+        public const int RES_SRS = 5;
+
+        /// <summary>
+        /// 道具资源
+        /// </summary>
+        public const int RES_GRS = 6;
+
+        /// <summary>
+        /// tile资源
+        /// </summary>
+        public const int RES_TIL = 7;
+
+        /// <summary>
+        /// 角色图片
+        /// </summary>
+        public const int RES_ACP = 8;
 
         /// <summary>
         /// 道具图片
@@ -37,44 +67,14 @@ namespace BBKRPGSimulator.Lib
         public const int RES_GGJ = 10;
 
         /// <summary>
-        /// 道具资源
-        /// </summary>
-        public const int RES_GRS = 6;
-
-        /// <summary>
-        /// 剧情脚本
-        /// </summary>
-        public const int RES_GUT = 1;
-
-        /// <summary>
-        /// 地图资源
-        /// </summary>
-        public const int RES_MAP = 2;
-
-        /// <summary>
-        /// 链资源
-        /// </summary>
-        public const int RES_MLR = 12;
-
-        /// <summary>
-        /// 魔法资源
-        /// </summary>
-        public const int RES_MRS = 4;
-
-        /// <summary>
         /// 杂类图片
         /// </summary>
         public const int RES_PIC = 11;
 
         /// <summary>
-        /// 特效资源
+        /// 链资源
         /// </summary>
-        public const int RES_SRS = 5;
-
-        /// <summary>
-        /// tile资源
-        /// </summary>
-        public const int RES_TIL = 7;
+        public const int RES_MLR = 12;
 
         /// <summary>
         /// 库文件内容缓存

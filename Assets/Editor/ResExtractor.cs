@@ -7,7 +7,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-public class ResTest
+public class ResExtractor
 {
     static Encoding gb2312Encoding = null;
 
@@ -29,12 +29,12 @@ public class ResTest
     /// </summary>
     private static Dictionary<int, int> _dataOffset = new Dictionary<int, int>(2048);
 
-    [MenuItem("工具/测试解压资源")]
+    [MenuItem("工具/解压资源")]
     public static void ExRes()
     {
         gb2312Encoding = new CP936();
 
-        string datPath = Application.streamingAssetsPath + "/Game/伏魔记.lib";
+        string datPath = Application.streamingAssetsPath + "/Game/伏魔记经典版.lib";
         buf = File.ReadAllBytes(datPath);
 
         Name = Utilities.GetGameName(buf);
@@ -71,7 +71,9 @@ public class ResTest
 
             int key = GetKey(resType, type, index);
             if (!_dataOffset.ContainsKey(key))
+            {
                 _dataOffset.Add(key, offset);
+            }
         }
 
         Debug.Log($"索引表解析完成，有效条目: {_dataOffset.Count}");
@@ -82,6 +84,7 @@ public class ResTest
     {
         int gutSaved = 0, gutSkipped = 0;
         int mapSaved = 0, mapSkipped = 0;
+        int srsSaved = 0, srsSkipped = 0;
 
         foreach (var kv in _dataOffset)
         {
@@ -97,6 +100,11 @@ public class ResTest
             {
                 if (ExtractMap(offset)) mapSaved++;
                 else mapSkipped++;
+            }
+            else if (resType == 5) 
+            { 
+                if (ExtractSrs(offset)) srsSaved++; 
+                else srsSkipped++; 
             }
         }
 
@@ -130,7 +138,7 @@ public class ResTest
         int numSceneEvent = buf[offset + 0x1A] & 0xFF;
         int scriptLen = length - numSceneEvent * 2 - 3;
 
-        if (type <= 0 || scriptLen <= 0)
+        if (scriptLen <= 0)
         {
             Debug.LogWarning($"[gut] offset=0x{offset:X} {type}-{index} scriptLen={scriptLen} 无效，跳过");
             return false;
@@ -207,6 +215,97 @@ public class ResTest
         File.WriteAllBytes(savePath, rawBlock);
         Debug.Log($"[map] 已保存: {type}-{index}.map  name={mapName}  w={mapWidth} h={mapHeight}  size={totalLen}  offset=0x{offset:X}");
         return true;
+    }
+
+    // ── srs 块解析与保存 ──────────────────────────────────────────
+    // srs 块格式（来自 ResSrs.SetData）：
+    //   +0x00        Type        1字节
+    //   +0x01        Index       1字节
+    //   +0x02        FrameCount  1字节
+    //   +0x03        ImageCount  1字节
+    //   +0x04        StartFrame  1字节
+    //   +0x05        EndFrame    1字节
+    //   +0x06        FrameHeader[FrameCount][5]   每帧5字节
+    //                  [x(1), y(1), show(1), nshow(1), imageIdx(1)]
+    //   +0x06+FrameCount*5   ResImage[ImageCount]  连续变长（见上）
+    //
+    // totalLen = 遍历累加所有 ResImage.GetBytesCount() 后的 ptr - offset
+    //
+    // 注意：部分块数据跨越 0x4000 block 边界，边界后有 0xFF padding，
+    //       但 totalLen 只取实际数据长度，padding 不计入。
+    private static bool ExtractSrs(int offset)
+    {
+        if (offset + 6 > buf.Length)
+        {
+            Debug.LogWarning($"[srs] offset=0x{offset:X} 块头超出文件范围，跳过");
+            return false;
+        }
+
+        int type = buf[offset];
+        int index = buf[offset + 1] & 0xFF;
+        int frameCount = buf[offset + 2] & 0xFF;
+        int imageCount = buf[offset + 3] & 0xFF;
+
+        // 跳过帧头表（每帧固定 5 字节）
+        int ptr = offset + 6 + frameCount * 5;
+
+        // 遍历每个 ResImage 累加大小
+        for (int i = 0; i < imageCount; i++)
+        {
+            if (ptr + 6 > buf.Length)
+            {
+                Debug.LogWarning($"[srs] offset=0x{offset:X} {type}-{index} img[{i}] 超出文件范围，跳过");
+                return false;
+            }
+            ptr += ResImageGetBytesCount(ptr);
+        }
+
+        int totalLen = ptr - offset;
+
+        byte[] rawBlock = new byte[totalLen];
+        Array.Copy(buf, offset, rawBlock, 0, totalLen);
+
+        string dir = Application.dataPath + "/../ExRes/srs";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        string savePath = dir + $"/{type}-{index}.srs";
+        File.WriteAllBytes(savePath, rawBlock);
+        Debug.Log($"[srs] 已保存: {type}-{index}.srs  fc={frameCount} ic={imageCount}  size={totalLen}  offset=0x{offset:X}");
+        return true;
+    }
+
+    // ── ResImage 大小计算 ─────────────────────────────────────────
+    // ResImage 格式：
+    //   +0x00  Type   1字节
+    //   +0x01  Index  1字节
+    //   +0x02  Width  1字节（像素）
+    //   +0x03  Height 1字节（像素）
+    //   +0x04  ?      1字节（固定=1）
+    //   +0x05  Mode   1字节（0=无数据, 1=1bpp无对齐, 2=2bpp偶数对齐）
+    //   +0x06  PixelData
+    //
+    // 公式：
+    //   raw  = ceil(W * mode / 8)
+    //   row  = ceil(raw / mode) * mode   // 对齐到 mode 字节
+    //   size = 6 + row * H
+    //
+    // 验证样本（全部通过）：
+    //   W= 8 H= 9 mode=1 → size= 15
+    //   W=16 H=16 mode=2 → size= 70
+    //   W=30 H=24 mode=2 → size=198
+    //   W=24 H=28 mode=2 → size=174
+    //   W=43 H=41 mode=2 → size=498  (raw=11 → row=12)
+    //   W=121 H=25 mode=1 → size=406
+    //   W=159 H= 2 mode=1 → size= 46
+    private static int ResImageGetBytesCount(int offset)
+    {
+        int w = buf[offset + 2] & 0xFF;
+        int h = buf[offset + 3] & 0xFF;
+        int mode = buf[offset + 5] & 0xFF;
+        if (mode == 0) return 6;                         // 无像素数据
+        int raw = (w * mode + 7) / 8;                   // 每行原始字节数
+        int row = (raw + mode - 1) / mode * mode;        // 对齐到 mode 字节
+        return 6 + row * h;
     }
 
     // ── 工具方法 ──────────────────────────────────────────
