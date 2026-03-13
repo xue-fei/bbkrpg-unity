@@ -10,81 +10,105 @@ using UnityEngine;
 /// <summary>
 /// GUT 脚本编译器：将 .txt 脚本编译为 .gut 二进制文件
 ///
-/// 完整 opcode 表（来自 ScriptProcess.cs CommandFactory）：
-///   0x00 MUSIC           0参数
-///   0x01 loadmap         4×u16
-///   0x02 CREATEACTOR     3×u16
-///   0x03 DELETENPC       1×u16
-///   0x06 MOVE            3×u16
-///   0x09 callback        0参数
-///   0x0A goto            1×u16（字节地址）
-///   0x0B if              参数可变（见EmitIf）
-///   0x0C set             2×u16
-///   0x0D say             1×u16 + GB2312字符串+\0
-///   0x0E STARTCHAPTER    2×u16
-///   0x10 SCREENSET       参数可变
-///   0x14 GAMEOVER        0参数
-///   0x15 IFCMP           参数可变
-///   0x16 ATTRIBADD       3×u16
-///   0x17 ATTRIBSUB       3×u16
-///   0x1A setevent        1×u16
-///   0x1B CLEAREVENT      1×u16
-///   0x1C BUY             0参数
-///   0x1D FACETOFACE      2×u16
-///   0x1E MOVIE           5×u16
-///   0x1F CHOICE          参数可变（字符串列表）
-///   0x20 CREATEBOX       4×u16
-///   0x21 DELETEBOX       1×u16
-///   0x22 GAINGOODS       3×u16
-///   0x23 INITFIGHT       参数可变
-///   0x24 FIGHTENABLE     0参数
-///   0x25 FIGHTDISENABLE  0参数
-///   0x26 CREATENPC       4×u16
-///   0x27 ENTERFIGHT      参数可变
-///   0x28 DELETECHARACTER 1×u16
-///   0x29 GAINMONEY       1×u32
-///   0x2A USEMONEY        1×u32
-///   0x2B SETMONEY        1×u32
-///   0x2C LEARNMAGIC      3×u16
-///   0x2D SALE            0参数
-///   0x2E NPCMOVEMOD      2×u16
-///   0x2F MESSAGE         GB2312字符串+\0
-///   0x30 DELETEGOODS     2×u16
-///   0x31 RESTOREHP       1×u16
-///   0x32 ACTORLAYERUP    0参数
-///   0x33 BOXOPEN         1×u16
-///   0x34 DELALLNPC       0参数
-///   0x35 NPCSTEP         3×u16
-///   0x36 SETSCENENAME    GB2312字符串+\0
-///   0x37 SHOWSCENENAME   0参数
-///   0x38 SHOWSCREEN      0参数
-///   0x39 USEGOODS        2×u16
-///   0x3A ATTRIBTEST      5×u16（伏魔记未用）
-///   0x3B ATTRIBSET       3×u16（伏魔记未用）
-///   0x3C ATTRIBADD       3×u16（伏魔记未用，同0x16?）
-///   0x3D SHOWGUT         3×u16 + GB2312字符串+\0
-///   0x3E USEGOODSNUM     3×u16
-///   0x3F RANDRADE        2×u16
-///   0x40 MENU            参数可变（字符串列表）
-///   0x41 TESTMONEY       3×u16
-///   0x42 CALLCHAPTER     2×u16（伏魔记未用）
-///   0x43 DISCMP          3×u16
-///   0x44 return          0参数
-///   0x45 TIMEMSG         参数可变（伏魔记未用）
-///   0x46 DISABLESAVE     0参数
-///   0x47 ENABLESAVE      0参数
-///   0x48 GAMESAVE        0参数（伏魔记未用）
-///   0x49 SETEVENTTIMER   参数可变（伏魔记未用）
-///   0x4A ENABLESHOWPOS   0参数
-///   0x4B DISABLESHOWPOS  0参数
-///   0x4C SETTO           3×u16
-///   0x4D TESTGOODSNUM    4×u16
-///   0x4E SETFIGHTMISS    2×u16（未实现）
-///   0x4F SETARMSTOSS     2×u16（未实现）
+/// 文件格式（对照 C++ Engine.h uBaseAddr = 0x18）：
+///   Offset 0x00 : byte  fileType
+///   Offset 0x01 : byte  fileIndex
+///   Offset 0x02~0x17 : 22字节固定头（0xCC填充，可含描述文字）
+///   Offset 0x18 : u16   Length（脚本段总长度 = NumSceneEvent*2+1 + scriptBytes.Length）
+///   Offset 0x1A : byte  NumSceneEvent
+///   Offset 0x1B : u16[] SceneEvent[NumSceneEvent]（跳转表，0表示未使用）
+///   Offset 0x1B+NumSceneEvent*2 : 脚本字节流
+///
+/// 标签格式：反编译器输出 label_123:，编译器同样支持此格式以及普通 word: 格式。
+///
+/// 完整 opcode 表（来自 TagResources.h）：
+///   0x00 Music           NN
+///   0x01 LoadMap         NNNN
+///   0x02 CreateActor     NNN
+///   0x03 DeleteNpc       N
+///   0x04 MapEvent        NNNNNN
+///   0x05 ActorEvent      NA
+///   0x06 Move            NNN
+///   0x07 ActorMove       NNNNNN
+///   0x08 ActorSpeed      NN
+///   0x09 Callback        (无参数)
+///   0x0A Goto            A
+///   0x0B If              NA
+///   0x0C Set             NN
+///   0x0D Say             NC
+///   0x0E StartChapter    NN
+///   0x0F ScreenR         N
+///   0x10 ScreenS         NN
+///   0x11 ScreenA         N
+///   0x12 Event           NA
+///   0x13 Money           N
+///   0x14 Gameover        (无参数)
+///   0x15 IfCmp           NNA
+///   0x16 Add             NN
+///   0x17 Sub             NN
+///   0x18 SetControlId    N
+///   0x19 GutEvent        NE  （跳转表索引，编译时写入跳转表）
+///   0x1A SetEvent        N
+///   0x1B ClrEvent        N
+///   0x1C Buy             U   （多个u16，以0终止）
+///   0x1D FaceToFace      NN
+///   0x1E Movie           NNNNN
+///   0x1F Choice          CCA （两个字符串+地址）
+///   0x20 CreateBox       NNNN
+///   0x21 DeleteBox       N
+///   0x22 GainGoods       NN
+///   0x23 InitFight       NNNNNNNNNNN
+///   0x24 FightEnable     (无参数)
+///   0x25 FightDisenable  (无参数)
+///   0x26 CreateNpc       NNNN
+///   0x27 EnterFight      NNNNNNNNNNNNNAA
+///   0x28 DeleteActor     N
+///   0x29 GainMoney       L
+///   0x2A UseMoney        L
+///   0x2B SetMoney        L
+///   0x2C LearnMagic      NNN
+///   0x2D Sale            (无参数)
+///   0x2E NpcMoveMod      NN
+///   0x2F Message         C
+///   0x30 DeleteGoods     NNA
+///   0x31 ResumeActorHp   NN
+///   0x32 ActorLayerUp    NN
+///   0x33 BoxOpen         N
+///   0x34 DelAllNpc       (无参数)
+///   0x35 NpcStep         NNN
+///   0x36 SetSceneName    C
+///   0x37 ShowSceneName   (无参数)
+///   0x38 ShowScreen      (无参数)
+///   0x39 UseGoods        NNA
+///   0x3A AttribTest      NNNAA
+///   0x3B AttribSet       NNN
+///   0x3C AttribAdd       NNN
+///   0x3D ShowGut         NNC
+///   0x3E UseGoodsNum     NNNA
+///   0x3F Randrade        NA
+///   0x40 Menu            NC
+///   0x41 TestMoney       LA
+///   0x42 CallChapter     NN
+///   0x43 DisCmp          NNAA
+///   0x44 Return          (无参数)
+///   0x45 TimeMsg         NC
+///   0x46 DisableSave     (无参数)
+///   0x47 EnableSave      (无参数)
+///   0x48 GameSave        (无参数)
+///   0x49 SetEventTimer   NN
+///   0x4A EnableShowPos   (无参数)
+///   0x4B DisableShowPos  (无参数)
+///   0x4C SetTo           NN
+///   0x4D TestGoodsNum    NNNAA
 /// </summary>
 public class GutCompiler
 {
     static Encoding gb2312 = null;
+
+    // 文件头固定大小（参见 C++ Engine.h: uBaseAddr = 0x18 = 24）
+    // 布局：[0] type, [1] index, [2..0x17] 22字节描述/保留, [0x18] length_lo, [0x19] length_hi
+    // 然后是 NumSceneEvent(1) + SceneEvent[](每项2字节) + 脚本流
+    const int HEADER_DESC_SIZE = 22; // type(1)+index(1)之后，length之前的填充字节数
 
     [MenuItem("工具/编译GUT脚本")]
     public static void CompileAll()
@@ -129,30 +153,48 @@ public class GutCompiler
 
         string stem = Path.GetFileNameWithoutExtension(txtPath);
         var parts = stem.Split('-');
-        if (parts.Length < 2
-            || !int.TryParse(parts[0], out int fileType)
-            || !int.TryParse(parts[1], out int fileIndex))
-            throw new Exception($"文件名格式错误，应为 type-index.txt，实际: {stem}");
+        if (parts.Length < 2 || !int.TryParse(parts[0], out int fileType))
+            throw new Exception($"文件名格式错误，应为 type-index[...].txt，实际: {stem}");
+        // parts[1] 可能是 "10M2" 这样的形式，只取开头的数字部分
+        string indexStr = System.Text.RegularExpressions.Regex.Match(parts[1], @"^\d+").Value;
+        if (!int.TryParse(indexStr, out int fileIndex))
+            throw new Exception($"文件名格式错误，无法解析索引: {stem}");
 
         string[] lines = File.ReadAllLines(txtPath, gb2312);
 
-        // ── 第一遍：删除 @开头的注释 ─────────────── 
-        var sceneEvents = new List<int>();
+        // ── 第一遍：删除注释行，收集 GutEvent 跳转表 ──────────
+        // GutEvent 行格式（来自反编译器输出）：GutEvent <slotIndex> label_<addr>
+        // 跳转表是稀疏的，按最大槽位分配，未使用的槽填0
+        var gutEventSlots = new Dictionary<int, string>(); // slot(1-based) -> label
 
         for (int i = 0; i < lines.Length; i++)
         {
-            var line = lines[i];
-            string t = line.Trim();
+            string t = lines[i].Trim();
             if (t.StartsWith("@"))
             {
                 lines[i] = "";
+                continue;
+            }
+            // 识别 GutEvent 行（在 @======GutEvent====== 注释段内或正文中）
+            if (t.StartsWith("GutEvent ", StringComparison.OrdinalIgnoreCase) ||
+                t.StartsWith("gutevent ", StringComparison.OrdinalIgnoreCase))
+            {
+                ParseLine(t, out string gcmd, out string[] gargs);
+                if (gargs.Length >= 2 && int.TryParse(gargs[0], out int slot))
+                {
+                    gutEventSlots[slot] = gargs[1]; // label name
+                }
+                lines[i] = ""; // GutEvent 行不生成指令字节，已记录到跳转表
             }
         }
 
+        // 计算跳转表大小：取最大槽位号（1-based），空槽填0
+        int jumpTableSize = gutEventSlots.Count > 0 ? 0 : 0;
+        foreach (int slot in gutEventSlots.Keys)
+            if (slot > jumpTableSize) jumpTableSize = slot;
+
         // ── 第二遍：编译指令字节流（两遍处理 goto/if 标签） ──
-        // Pass A：收集标签位置
         var labelPos = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        // Pass B：生成字节，goto/if 先填占位符，最后回填
         var script = new List<byte>();
         // 记录需要回填的位置：(scriptByteOffset, labelName)
         var patchList = new List<(int patchOffset, string label)>();
@@ -162,10 +204,14 @@ public class GutCompiler
         {
             lineNum++;
             string line = rawLine.Trim();
-            if (string.IsNullOrEmpty(line) || line.StartsWith("@")) continue;
+            // 裁掉行内 @ 注释（@ 之前的内容保留）
+            int atIdx = line.IndexOf('@');
+            if (atIdx >= 0) line = line.Substring(0, atIdx).TrimEnd();
+            if (string.IsNullOrEmpty(line)) continue;
 
-            // 标签行（如 "chapnext:"）
-            if (Regex.IsMatch(line, @"^\w+:$"))
+            // 标签行：支持 label_123:、word:、中文标签:、含连字符的标签:
+            // 匹配以非空白字符开头、以冒号结尾、冒号后无其他内容的行
+            if (line.EndsWith(":") && !line.Contains(' '))
             {
                 string label = line.TrimEnd(':');
                 labelPos[label] = script.Count;
@@ -177,34 +223,84 @@ public class GutCompiler
         }
 
         // 回填 goto/if 中的标签地址（u16 LE）
+        // 地址是相对脚本段起始的偏移，脚本段起始 = uBaseAddr(0x18) + 2(length) + 1(numSceneEvent) + jumpTableSize*2
+        // 即存储值 = script字节偏移 + jumpTableSize*2 + 1（numSceneEvent字节本身不计入length偏移起点）
+        // C++中：脚本段数据从 (uBaseAddr + 2 + 1 + jumpTableSize*2) 开始读，
+        //        但length字段定义的段长度包含了 (1 + jumpTableSize*2 + scriptBytes.Length)
+        //        地址回填值 = 脚本内偏移 + (1 + jumpTableSize*2)
+        // 地址值 = file_offset - uBaseAddr(24)
+        // file_offset of script[i] = 24 + 2(Length字段) + 1(NumSceneEvent) + jumpTableSize*2 + i
+        // 所以 rawAddr = script内偏移 + 2 + 1 + jumpTableSize*2
+        int scriptDataOffset = 2 + 1 + jumpTableSize * 2;
+
+        // 先解析跳转表中的标签，得到实际地址（需要在回填完patchList之后才能知道，
+        // 但跳转表地址也是脚本内偏移，同样需要加 scriptDataOffset）
+        // 注意：跳转表标签回填必须在所有labelPos已知后进行
+        var jumpTable = new int[jumpTableSize]; // 存储原始脚本内偏移（待加offset后写入文件）
+        for (int i = 0; i < jumpTableSize; i++)
+        {
+            int slot1Based = i + 1;
+            if (gutEventSlots.TryGetValue(slot1Based, out string evLabel))
+            {
+                if (!labelPos.TryGetValue(evLabel, out int evAddr))
+                    throw new Exception($"GutEvent 槽 {slot1Based} 引用了未定义的标签: {evLabel}");
+                jumpTable[i] = evAddr + scriptDataOffset;
+            }
+            else
+            {
+                jumpTable[i] = 0; // 未使用的槽填0
+            }
+        }
+
+        // 回填脚本内的标签地址
         foreach (var (patchOffset, label) in patchList)
         {
             if (!labelPos.TryGetValue(label, out int addr))
                 throw new Exception($"未定义的标签: {label}");
-            // ScriptExecutor 中地址是相对 ScriptData 起始的字节偏移
-            // 但实际存储的是相对于 Length 字段定义的段偏移，加上 NumSceneEvent*2+3
-            int rawAddr = addr + sceneEvents.Count * 2 + 3;
+            int rawAddr = addr + scriptDataOffset;
             script[patchOffset] = (byte)(rawAddr & 0xFF);
             script[patchOffset + 1] = (byte)((rawAddr >> 8) & 0xFF);
         }
 
-        // ── 组装 GUT 文件头 ───────────────────────────────────
+        // ── 组装 GUT 文件 ─────────────────────────────────────
+        // 文件布局：
+        //   [0]     fileType
+        //   [1]     fileIndex
+        //   [2..23] 22字节描述/保留（0xCC填充）
+        //   [24]    length lo  （length = 1 + jumpTableSize*2 + scriptBytes.Length）
+        //   [25]    length hi
+        //   [26]    numSceneEvent (= jumpTableSize)
+        //   [27..27+jumpTableSize*2-1]  jumpTable (u16 LE each)
+        //   [27+jumpTableSize*2 ..]     scriptBytes
         byte[] scriptBytes = script.ToArray();
-        int length = sceneEvents.Count * 2 + 3 + scriptBytes.Length;
+        // Length = fileSize - 24 = 2(Length字段本身) + 1(NumSceneEvent) + jumpTableSize*2 + script长度
+        int length = 2 + 1 + jumpTableSize * 2 + scriptBytes.Length;
 
         using var ms = new MemoryStream();
         using var w = new BinaryWriter(ms);
 
         w.Write((byte)fileType);
         w.Write((byte)fileIndex);
-        w.Write((byte)(length & 0xFF));                 // Length lo
-        w.Write((byte)((length >> 8) & 0xFF));          // Length hi
-        w.Write((byte)sceneEvents.Count);               // NumSceneEvent
-        foreach (int ev in sceneEvents)                 // SceneEvent[]
+        // 22字节描述区 [2..23]：前21字节0xCC，最后1字节固定0x00
+        // 格式与原始GUT文件一致（原始文件此区为：描述字符串+\0+0xCC填充+\0）
+        byte[] desc = new byte[HEADER_DESC_SIZE];
+        for (int i = 0; i < HEADER_DESC_SIZE - 1; i++) desc[i] = 0xCC;
+        desc[HEADER_DESC_SIZE - 1] = 0x00; // 最后一字节必须是\0
+        w.Write(desc);
+
+        // Length 字段位于 uBaseAddr = 0x18
+        w.Write((byte)(length & 0xFF));
+        w.Write((byte)((length >> 8) & 0xFF));
+
+        // 跳转表
+        w.Write((byte)jumpTableSize);
+        for (int i = 0; i < jumpTableSize; i++)
         {
-            w.Write((byte)(ev & 0xFF));
-            w.Write((byte)((ev >> 8) & 0xFF));
+            w.Write((byte)(jumpTable[i] & 0xFF));
+            w.Write((byte)((jumpTable[i] >> 8) & 0xFF));
         }
+
+        // 脚本字节流
         w.Write(scriptBytes);
 
         File.WriteAllBytes(outPath, ms.ToArray());
@@ -219,17 +315,14 @@ public class GutCompiler
         switch (cmd.ToLowerInvariant())
         {
             // ── 0参数指令 ────────────────────────────────────
-            case "music": buf.Add(0x00); break;
             case "callback": buf.Add(0x09); break;
             case "gameover": buf.Add(0x14); break;
-            case "buy": buf.Add(0x1C); break;
-            case "fightenable": buf.Add(0x24); break;
-            case "fightdisenable": buf.Add(0x25); break;
             case "sale": buf.Add(0x2D); break;
-            case "actorlayerup": buf.Add(0x32); break;
             case "delallnpc": buf.Add(0x34); break;
             case "showscenename": buf.Add(0x37); break;
             case "showscreen": buf.Add(0x38); break;
+            case "fightenable": buf.Add(0x24); break;
+            case "fightdisenable": buf.Add(0x25); break;
             case "return": buf.Add(0x44); break;
             case "disablesave": buf.Add(0x46); break;
             case "enablesave": buf.Add(0x47); break;
@@ -237,71 +330,139 @@ public class GutCompiler
             case "enableshowpos": buf.Add(0x4A); break;
             case "disableshowpos": buf.Add(0x4B); break;
 
-            // ── N×u16 定长指令 ───────────────────────────────
-            case "loadmap": Emit(buf, 0x01, args, 4, lineNum, line); break;
-            case "createactor": Emit(buf, 0x02, args, 3, lineNum, line); break;
-            case "deletenpc": Emit(buf, 0x03, args, 1, lineNum, line); break;
-            case "move": Emit(buf, 0x06, args, 3, lineNum, line); break;
+            // ── NN 定长指令 ──────────────────────────────────
+            case "music": Emit(buf, 0x00, args, 2, lineNum, line); break;
+            case "actorspeed": Emit(buf, 0x08, args, 2, lineNum, line); break;
             case "set": Emit(buf, 0x0C, args, 2, lineNum, line); break;
             case "startchapter": Emit(buf, 0x0E, args, 2, lineNum, line); break;
-            case "screenset": Emit(buf, 0x10, args, 2, lineNum, line); break;
-            case "attribadd": Emit(buf, 0x16, args, 3, lineNum, line); break;
-            case "attribsub": Emit(buf, 0x17, args, 3, lineNum, line); break;
-            case "setevent": Emit(buf, 0x1A, args, 1, lineNum, line); break;
-            case "clearevent": Emit(buf, 0x1B, args, 1, lineNum, line); break;
+            case "screens": Emit(buf, 0x10, args, 2, lineNum, line); break; // ScreenS NN
+            case "add": Emit(buf, 0x16, args, 2, lineNum, line); break;
+            case "sub": Emit(buf, 0x17, args, 2, lineNum, line); break;
             case "facetoface": Emit(buf, 0x1D, args, 2, lineNum, line); break;
-            case "movie": Emit(buf, 0x1E, args, 5, lineNum, line); break;
-            case "createbox": Emit(buf, 0x20, args, 4, lineNum, line); break;
-            case "deletebox": Emit(buf, 0x21, args, 1, lineNum, line); break;
-            case "gaingoods": Emit(buf, 0x22, args, 3, lineNum, line); break;
-            case "createnpc": Emit(buf, 0x26, args, 4, lineNum, line); break;
-            case "deletecharacter": Emit(buf, 0x28, args, 1, lineNum, line); break;
-            case "learnmagic": Emit(buf, 0x2C, args, 3, lineNum, line); break;
             case "npcmovemod": Emit(buf, 0x2E, args, 2, lineNum, line); break;
-            case "deletegoods": Emit(buf, 0x30, args, 2, lineNum, line); break;
-            case "restorehp": Emit(buf, 0x31, args, 1, lineNum, line); break;
+            case "resumeactorhp": Emit(buf, 0x31, args, 2, lineNum, line); break;
+            case "actorlayerup": Emit(buf, 0x32, args, 2, lineNum, line); break;
+            case "seteventtimer": Emit(buf, 0x49, args, 2, lineNum, line); break;
+            case "setto": Emit(buf, 0x4C, args, 2, lineNum, line); break;
+
+            // ── N 定长指令 ───────────────────────────────────
+            case "deletenpc": Emit(buf, 0x03, args, 1, lineNum, line); break;
+            case "screenr": Emit(buf, 0x0F, args, 1, lineNum, line); break; // ScreenR N
+            case "screena": Emit(buf, 0x11, args, 1, lineNum, line); break; // ScreenA N
+            case "money": Emit(buf, 0x13, args, 1, lineNum, line); break;
+            case "setcontrolid": Emit(buf, 0x18, args, 1, lineNum, line); break;
+            case "setevent": Emit(buf, 0x1A, args, 1, lineNum, line); break;
+            case "clrevent": Emit(buf, 0x1B, args, 1, lineNum, line); break;
+            case "deletebox": Emit(buf, 0x21, args, 1, lineNum, line); break;
+            case "deleteactor": Emit(buf, 0x28, args, 1, lineNum, line); break;
             case "boxopen": Emit(buf, 0x33, args, 1, lineNum, line); break;
+
+            // ── NNN 定长指令 ─────────────────────────────────
+            case "createactor": Emit(buf, 0x02, args, 3, lineNum, line); break;
+            case "move": Emit(buf, 0x06, args, 3, lineNum, line); break;
+            case "learnmagic": Emit(buf, 0x2C, args, 3, lineNum, line); break;
             case "npcstep": Emit(buf, 0x35, args, 3, lineNum, line); break;
-            case "usegoods": Emit(buf, 0x39, args, 2, lineNum, line); break;
-            case "attribtest": Emit(buf, 0x3A, args, 5, lineNum, line); break;
             case "attribset": Emit(buf, 0x3B, args, 3, lineNum, line); break;
+            case "attribadd": Emit(buf, 0x3C, args, 3, lineNum, line); break; // 0x3C AttribAdd NNN
             case "usegoodsnum": Emit(buf, 0x3E, args, 3, lineNum, line); break;
-            case "randrade": Emit(buf, 0x3F, args, 2, lineNum, line); break;
-            case "testmoney": Emit(buf, 0x41, args, 3, lineNum, line); break;
             case "callchapter": Emit(buf, 0x42, args, 2, lineNum, line); break;
-            case "discmp": Emit(buf, 0x43, args, 3, lineNum, line); break;
-            case "setto": Emit(buf, 0x4C, args, 3, lineNum, line); break;
-            case "testgoodsnum": Emit(buf, 0x4D, args, 4, lineNum, line); break;
-            case "setfightmiss": Emit(buf, 0x4E, args, 2, lineNum, line); break;
-            case "setarmstoss": Emit(buf, 0x4F, args, 2, lineNum, line); break;
+
+            // ── NNNN 定长指令 ────────────────────────────────
+            case "loadmap": Emit(buf, 0x01, args, 4, lineNum, line); break;
+            case "createbox": Emit(buf, 0x20, args, 4, lineNum, line); break;
+            case "createnpc": Emit(buf, 0x26, args, 4, lineNum, line); break;
+
+            // ── NNNNNN 定长指令 ──────────────────────────────
+            case "mapevent": Emit(buf, 0x04, args, 6, lineNum, line); break;
+            case "actormove": Emit(buf, 0x07, args, 6, lineNum, line); break;
+
+            // ── NNNNN 定长指令 ───────────────────────────────
+            case "movie": Emit(buf, 0x1E, args, 5, lineNum, line); break;
+
+            // ── gaingoods: NN（注意原C++TAG_PARAM为"NN"，非NNN）──
+            case "gaingoods": Emit(buf, 0x22, args, 2, lineNum, line); break;
+
+            // ── NNNNNNNNNNN 定长指令 ─────────────────────────
+            case "initfight": Emit(buf, 0x23, args, 11, lineNum, line); break;
 
             // ── u32 参数指令 ─────────────────────────────────
             case "gainmoney": EmitU32(buf, 0x29, args, lineNum, line); break;
             case "usemoney": EmitU32(buf, 0x2A, args, lineNum, line); break;
             case "setmoney": EmitU32(buf, 0x2B, args, lineNum, line); break;
 
+            // ── 带地址参数指令（需要标签回填）────────────────
+            // ActorEvent NA
+            case "actorevent":
+                EmitNA(buf, patchList, labelPos, 0x05, args, lineNum, line); break;
+            // Event NA
+            case "event":
+                EmitNA(buf, patchList, labelPos, 0x12, args, lineNum, line); break;
+            // Goto A
+            case "goto":
+                EmitGoto(buf, patchList, labelPos, args, lineNum, line); break;
+            // If NA
+            case "if":
+                EmitIf(buf, patchList, labelPos, args, lineNum, line); break;
+            // IfCmp NNA
+            case "ifcmp":
+                EmitIfCmp(buf, patchList, labelPos, args, lineNum, line); break;
+            // DeleteGoods NNA
+            case "deletegoods":
+                EmitNNA(buf, patchList, labelPos, 0x30, args, lineNum, line); break;
+            // UseGoods NNA
+            case "usegoods":
+                EmitNNA(buf, patchList, labelPos, 0x39, args, lineNum, line); break;
+            // AttribTest NNNAA
+            case "attribtest":
+                EmitNNNAA(buf, patchList, labelPos, 0x3A, args, lineNum, line); break;
+            // Randrade NA
+            case "randrade":
+                EmitNA(buf, patchList, labelPos, 0x3F, args, lineNum, line); break;
+            // TestMoney LA
+            case "testmoney":
+                EmitLA(buf, patchList, labelPos, 0x41, args, lineNum, line); break;
+            // DisCmp NNAA
+            case "discmp":
+                EmitNNAA(buf, patchList, labelPos, 0x43, args, lineNum, line); break;
+            // TestGoodsNum NNNAA
+            case "testgoodsnum":
+                EmitNNNAA(buf, patchList, labelPos, 0x4D, args, lineNum, line); break;
+            // EnterFight NNNNNNNNNNNNNAA
+            case "enterfight":
+                EmitEnterFight(buf, patchList, labelPos, args, lineNum, line); break;
+
             // ── 带字符串指令 ─────────────────────────────────
-            case "say": EmitSay(buf, args, lineNum, line); break;
-            case "message": EmitStringOnly(buf, 0x2F, args, lineNum, line); break;
-            case "setscenename": EmitStringOnly(buf, 0x36, args, lineNum, line); break;
+            // Say NC
+            case "say":
+                EmitSay(buf, args, lineNum, line); break;
+            // Message C
+            case "message":
+                EmitStringOnly(buf, 0x2F, args, lineNum, line); break;
+            // SetSceneName C
+            case "setscenename":
+                EmitStringOnly(buf, 0x36, args, lineNum, line); break;
+            // ShowGut NNC
+            case "showgut":
+                EmitShowGut(buf, args, lineNum, line); break;
+            // Menu NC（opcode + u16 actorId + 字符串+\0）
+            case "menu":
+                EmitNC(buf, 0x40, args, lineNum, line); break;
+            // TimeMsg NC
+            case "timemsg":
+                EmitNC(buf, 0x45, args, lineNum, line); break;
 
-            // ── SHOWGUT: 3×u16 + 字符串 ──────────────────────
-            case "showgut": EmitShowGut(buf, args, lineNum, line); break;
+            // ── Choice CCA（两个字符串+地址）────────────────
+            case "choice":
+                EmitChoice(buf, patchList, labelPos, args, lineNum, line); break;
 
-            // ── 跳转指令（需要回填标签）────────────────────────
-            case "goto": EmitGoto(buf, patchList, labelPos, args, lineNum, line); break;
+            // ── Buy U（多个u16，以0终止）──────────────────────
+            case "buy":
+                EmitBuy(buf, args, lineNum, line); break;
 
-            // ── INITFIGHT / ENTERFIGHT：变长参数 ─────────────
-            case "initfight": EmitVarU16(buf, 0x23, args, lineNum, line); break;
-            case "enterfight": EmitVarU16(buf, 0x27, args, lineNum, line); break;
-
-            // ── MENU / CHOICE：count + 字符串列表 ─────────────
-            case "menu": EmitStringList(buf, 0x40, args, lineNum, line); break;
-            case "choice": EmitStringList(buf, 0x1F, args, lineNum, line); break;
-
-            // ── IF / IFCMP：条件跳转，带标签回填 ─────────────
-            case "if": EmitIf(buf, patchList, labelPos, args, lineNum, line); break;
-            case "ifcmp": EmitIfCmp(buf, patchList, labelPos, args, lineNum, line); break;
+            // ── GutEvent NE（跳转表引用，在头部处理，此处跳过）──
+            case "gutevent":
+                // 已在第一遍处理，此处不生成字节
+                break;
 
             default:
                 Debug.LogWarning($"[GutCompiler] 第{lineNum}行：未知指令 '{cmd}'，跳过: {line}");
@@ -318,14 +479,6 @@ public class GutCompiler
         for (int i = 0; i < n; i++) WriteU16(buf, ParseInt(args[i], lineNum, line));
     }
 
-    // ── 变长 u16（参数个数由 args.Length 决定）──────────────
-    static void EmitVarU16(List<byte> buf, byte op, string[] args, int lineNum, string line)
-    {
-        buf.Add(op);
-        WriteU16(buf, args.Length); // 先写参数个数
-        foreach (var a in args) WriteU16(buf, ParseInt(a, lineNum, line));
-    }
-
     // ── u32 参数 ──────────────────────────────────────────
     static void EmitU32(List<byte> buf, byte op, string[] args, int lineNum, string line)
     {
@@ -335,12 +488,93 @@ public class GutCompiler
         WriteU32(buf, ParseInt(args[0], lineNum, line));
     }
 
+    // ── NA：opcode + u16 + 地址回填 ─────────────────────────
+    static void EmitNA(List<byte> buf, List<(int, string)> patchList,
+        Dictionary<string, int> labelPos, byte op, string[] args, int lineNum, string line)
+    {
+        if (args.Length < 2)
+            throw new Exception($"第{lineNum}行：{line} 需要2个参数（数值 + 标签）");
+        buf.Add(op);
+        WriteU16(buf, ParseInt(args[0], lineNum, line));
+        EmitLabel(buf, patchList, labelPos, args[1]);
+    }
+
+    // ── NNA：opcode + u16 + u16 + 地址回填 ──────────────────
+    static void EmitNNA(List<byte> buf, List<(int, string)> patchList,
+        Dictionary<string, int> labelPos, byte op, string[] args, int lineNum, string line)
+    {
+        if (args.Length < 3)
+            throw new Exception($"第{lineNum}行：{line} 需要3个参数（N N 标签）");
+        buf.Add(op);
+        WriteU16(buf, ParseInt(args[0], lineNum, line));
+        WriteU16(buf, ParseInt(args[1], lineNum, line));
+        EmitLabel(buf, patchList, labelPos, args[2]);
+    }
+
+    // ── NNAA：opcode + u16 + u16 + addr + addr ───────────────
+    static void EmitNNAA(List<byte> buf, List<(int, string)> patchList,
+        Dictionary<string, int> labelPos, byte op, string[] args, int lineNum, string line)
+    {
+        if (args.Length < 4)
+            throw new Exception($"第{lineNum}行：{line} 需要4个参数（N N 标签 标签）");
+        buf.Add(op);
+        WriteU16(buf, ParseInt(args[0], lineNum, line));
+        WriteU16(buf, ParseInt(args[1], lineNum, line));
+        EmitLabel(buf, patchList, labelPos, args[2]);
+        EmitLabel(buf, patchList, labelPos, args[3]);
+    }
+
+    // ── NNNAA：opcode + u16×3 + addr + addr ─────────────────
+    static void EmitNNNAA(List<byte> buf, List<(int, string)> patchList,
+        Dictionary<string, int> labelPos, byte op, string[] args, int lineNum, string line)
+    {
+        if (args.Length < 5)
+            throw new Exception($"第{lineNum}行：{line} 需要5个参数（N N N 标签 标签）");
+        buf.Add(op);
+        for (int i = 0; i < 3; i++) WriteU16(buf, ParseInt(args[i], lineNum, line));
+        EmitLabel(buf, patchList, labelPos, args[3]);
+        EmitLabel(buf, patchList, labelPos, args[4]);
+    }
+
+    // ── LA：opcode + u32 + 地址回填 ─────────────────────────
+    static void EmitLA(List<byte> buf, List<(int, string)> patchList,
+        Dictionary<string, int> labelPos, byte op, string[] args, int lineNum, string line)
+    {
+        if (args.Length < 2)
+            throw new Exception($"第{lineNum}行：{line} 需要2个参数（u32值 + 标签）");
+        buf.Add(op);
+        WriteU32(buf, ParseInt(args[0], lineNum, line));
+        EmitLabel(buf, patchList, labelPos, args[1]);
+    }
+
+    // ── EnterFight NNNNNNNNNNNNNAA ───────────────────────────
+    static void EmitEnterFight(List<byte> buf, List<(int, string)> patchList,
+        Dictionary<string, int> labelPos, string[] args, int lineNum, string line)
+    {
+        if (args.Length < 15)
+            throw new Exception($"第{lineNum}行：EnterfFight 需要15个参数（13×N + 2×A）: {line}");
+        buf.Add(0x27);
+        for (int i = 0; i < 13; i++) WriteU16(buf, ParseInt(args[i], lineNum, line));
+        EmitLabel(buf, patchList, labelPos, args[13]);
+        EmitLabel(buf, patchList, labelPos, args[14]);
+    }
+
     // ── SAY：opcode + u16 actor + 字符串+\0 ─────────────────
     static void EmitSay(List<byte> buf, string[] args, int lineNum, string line)
     {
         if (args.Length < 2)
             throw new Exception($"第{lineNum}行：say 需要 actorId 和文本: {line}");
         buf.Add(0x0D);
+        WriteU16(buf, ParseInt(args[0], lineNum, line));
+        WriteGBString(buf, args[1]);
+    }
+
+    // ── NC：opcode + u16 + 字符串+\0 ────────────────────────
+    static void EmitNC(List<byte> buf, byte op, string[] args, int lineNum, string line)
+    {
+        if (args.Length < 2)
+            throw new Exception($"第{lineNum}行：{line} 需要数值参数和字符串参数");
+        buf.Add(op);
         WriteU16(buf, ParseInt(args[0], lineNum, line));
         WriteGBString(buf, args[1]);
     }
@@ -354,14 +588,16 @@ public class GutCompiler
         WriteGBString(buf, args[0]);
     }
 
-    // ── SHOWGUT：opcode + 3×u16 + 字符串+\0 ─────────────────
+    // ── SHOWGUT：opcode + 2×u16 + 字符串+\0 ─────────────────
+    // C++ TAG_PARAM: "NNC"（2个u16 + 字符串）
     static void EmitShowGut(List<byte> buf, string[] args, int lineNum, string line)
     {
-        if (args.Length < 4)
-            throw new Exception($"第{lineNum}行：SHOWGUT 需要3个数字参数和1个字符串: {line}");
+        if (args.Length < 3)
+            throw new Exception($"第{lineNum}行：ShowGut 需要2个数字参数和1个字符串: {line}");
         buf.Add(0x3D);
-        for (int i = 0; i < 3; i++) WriteU16(buf, ParseInt(args[i], lineNum, line));
-        WriteGBString(buf, args[3]);
+        WriteU16(buf, ParseInt(args[0], lineNum, line));
+        WriteU16(buf, ParseInt(args[1], lineNum, line));
+        WriteGBString(buf, args[2]);
     }
 
     // ── GOTO：opcode + u16 地址（回填）──────────────────────
@@ -371,67 +607,79 @@ public class GutCompiler
         if (args.Length < 1)
             throw new Exception($"第{lineNum}行：goto 需要标签参数: {line}");
         buf.Add(0x0A);
-        string label = args[0];
-        if (labelPos.TryGetValue(label, out int addr))
-        {
-            WriteU16(buf, addr); // 前向标签已知，直接写
-        }
-        else
-        {
-            patchList.Add((buf.Count, label)); // 后向标签，占位
-            WriteU16(buf, 0);
-        }
+        EmitLabel(buf, patchList, labelPos, args[0]);
     }
 
-    // ── IF：opcode + var1 + var2 + op + lowLabel + highLabel ─
-    // TXT格式: if var1 cmpOp var2 lowLabel highLabel
-    // 暂用简化格式: if varIdx cmpVal lowLabel highLabel
+    // ── IF：opcode + u16(varIdx) + u16(val) + addr(low) + addr(high) ──
+    // C++ TAG_PARAM: "NA" → N=varIdx, A=目标地址
+    // 反编译输出: If N A
     static void EmitIf(List<byte> buf, List<(int, string)> patchList,
         Dictionary<string, int> labelPos, string[] args, int lineNum, string line)
     {
-        if (args.Length < 4)
-            throw new Exception($"第{lineNum}行：if 需要4个参数: varIdx val lowLabel highLabel");
+        if (args.Length < 2)
+            throw new Exception($"第{lineNum}行：if 需要2个参数: varIdx label");
         buf.Add(0x0B);
         WriteU16(buf, ParseInt(args[0], lineNum, line)); // varIdx
-        WriteU16(buf, ParseInt(args[1], lineNum, line)); // val
-        EmitLabel(buf, patchList, labelPos, args[2]);   // lowLabel
-        EmitLabel(buf, patchList, labelPos, args[3]);   // highLabel
+        EmitLabel(buf, patchList, labelPos, args[1]);    // 目标地址
     }
 
-    // ── IFCMP：opcode + var1 + var2 + lowLabel + highLabel ───
-    // TXT格式: IFCMP var1 var2 lowLabel highLabel
+    // ── IFCMP：opcode + u16(var1) + u16(var2) + addr ─────────
+    // C++ TAG_PARAM: "NNA" → N N A
     static void EmitIfCmp(List<byte> buf, List<(int, string)> patchList,
         Dictionary<string, int> labelPos, string[] args, int lineNum, string line)
     {
-        if (args.Length < 4)
-            throw new Exception($"第{lineNum}行：ifcmp 需要4个参数: var1 var2 lowLabel highLabel");
+        if (args.Length < 3)
+            throw new Exception($"第{lineNum}行：ifcmp 需要3个参数: var1 var2 label");
         buf.Add(0x15);
         WriteU16(buf, ParseInt(args[0], lineNum, line));
         WriteU16(buf, ParseInt(args[1], lineNum, line));
         EmitLabel(buf, patchList, labelPos, args[2]);
-        EmitLabel(buf, patchList, labelPos, args[3]);
     }
 
-    // ── MENU/CHOICE：opcode + count×u16 + count个字符串+\0 ──
-    // TXT格式: menu "选项1" "选项2" ...
-    static void EmitStringList(List<byte> buf, byte op, string[] args, int lineNum, string line)
+    // ── CHOICE：opcode + 字符串1+\0 + 字符串2+\0 + 地址 ──────
+    // C++ TAG_PARAM: "CCA" → C C A
+    static void EmitChoice(List<byte> buf, List<(int, string)> patchList,
+        Dictionary<string, int> labelPos, string[] args, int lineNum, string line)
     {
-        buf.Add(op);
-        WriteU16(buf, args.Length);
-        foreach (var s in args) WriteGBString(buf, s);
+        if (args.Length < 3)
+            throw new Exception($"第{lineNum}行：Choice 需要3个参数: 字符串1 字符串2 标签");
+        buf.Add(0x1F);
+        WriteGBString(buf, args[0]);
+        WriteGBString(buf, args[1]);
+        EmitLabel(buf, patchList, labelPos, args[2]);
     }
 
-    // ── 标签辅助：写地址或占位 ───────────────────────────────
+    // ── BUY U：opcode + u16... + 0×u16（以0终止的u16列表）────
+    // C++ TAG_PARAM: "U" → 读多个u16直到peek到0，然后跳过0字节
+    // 反编译器输出格式：buy "7007 7008 7021 ..."（空格分隔的整数，包在引号内）
+    static void EmitBuy(List<byte> buf, string[] args, int lineNum, string line)
+    {
+        buf.Add(0x1C);
+        // 支持两种格式：
+        // 1. buy "7007 7008 7021 ..."  → args[0] 是整个空格分隔字符串
+        // 2. buy 7007 7008 7021 ...    → args 是多个独立整数
+        if (args.Length == 1 && args[0].Contains(' '))
+        {
+            // 格式1：引号内空格分隔的字符串
+            foreach (var part in args[0].Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                WriteU16(buf, ParseInt(part.Trim(), lineNum, line));
+        }
+        else
+        {
+            // 格式2：多个独立参数
+            foreach (var a in args) WriteU16(buf, ParseInt(a, lineNum, line));
+        }
+        WriteU16(buf, 0); // 终止符
+    }
+
+    // ── 标签辅助：写地址占位，统一通过patchList回填（含scriptDataOffset）──
     static void EmitLabel(List<byte> buf, List<(int, string)> patchList,
         Dictionary<string, int> labelPos, string label)
     {
-        if (labelPos.TryGetValue(label, out int addr))
-            WriteU16(buf, addr);
-        else
-        {
-            patchList.Add((buf.Count, label));
-            WriteU16(buf, 0);
-        }
+        // 无论前向还是后向标签，都走patchList回填
+        // 因为最终地址 = script内偏移 + scriptDataOffset，此时scriptDataOffset尚未计算
+        patchList.Add((buf.Count, label));
+        WriteU16(buf, 0);
     }
 
     // ── 底层写入 ──────────────────────────────────────────
@@ -453,25 +701,6 @@ public class GutCompiler
     {
         buf.AddRange(gb2312.GetBytes(s));
         buf.Add(0x00);
-    }
-
-    // ── Description 字段（固定23字节，0xCC填充）─────────────
-    static byte[] EncodeDescription(string desc)
-    {
-        byte[] result = new byte[23];
-        for (int i = 0; i < 23; i++) result[i] = 0xCC;
-        if (!string.IsNullOrEmpty(desc))
-        {
-            byte[] encoded = gb2312.GetBytes(desc);
-            int copyLen = Math.Min(encoded.Length, 21);
-            Array.Copy(encoded, result, copyLen);
-            result[copyLen] = 0x00;
-        }
-        else
-        {
-            result[0] = 0x00;
-        }
-        return result;
     }
 
     // ── 行解析：提取指令名 + 参数（支持引号字符串）──────────
