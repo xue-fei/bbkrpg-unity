@@ -86,6 +86,10 @@ public class ResExtractor
         int mapSaved = 0, mapSkipped = 0;
         int srsSaved = 0, srsSkipped = 0;
 
+        int tilSaved = 0, tilSkipped = 0, 
+            acpSaved = 0, acpSkipped = 0, 
+            gdpSaved = 0, gdpSkipped = 0;
+
         foreach (var kv in _dataOffset)
         {
             int resType = (kv.Key >> 16) & 0xFF;
@@ -106,10 +110,26 @@ public class ResExtractor
                 if (ExtractSrs(offset)) srsSaved++; 
                 else srsSkipped++; 
             }
+            else if (resType == 7) 
+            { 
+                if (ExtractResImage(offset, "til")) tilSaved++; 
+                else tilSkipped++; 
+            }
+            else if (resType == 8) 
+            { 
+                if (ExtractResImage(offset, "acp")) acpSaved++; 
+                else acpSkipped++; }
+            else if (resType == 9) 
+            { 
+                if (ExtractResImage(offset, "gdp")) gdpSaved++; 
+                else gdpSkipped++; }
         }
 
         Debug.Log($"gut: 保存 {gutSaved} 个，跳过 {gutSkipped} 个");
         Debug.Log($"map: 保存 {mapSaved} 个，跳过 {mapSkipped} 个");
+        Debug.Log($"til: 保存 {tilSaved} 个，跳过 {tilSkipped} 个");
+        Debug.Log($"acp: 保存 {acpSaved} 个，跳过 {acpSkipped} 个");
+        Debug.Log($"gdp: 保存 {gdpSaved} 个，跳过 {gdpSkipped} 个");
     }
 
     // ── gut 块解析与保存 ──────────────────────────────────
@@ -306,6 +326,80 @@ public class ResExtractor
         int raw = (w * mode + 7) / 8;                   // 每行原始字节数
         int row = (raw + mode - 1) / mode * mode;        // 对齐到 mode 字节
         return 6 + row * h;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  ResExtractor.cs — 新增 RES_TIL / RES_ACP / RES_GDP 提取支持
+    //  同一个方法 ExtractResImage 处理全部三种 resType
+    // ═══════════════════════════════════════════════════════════════════════  
+    // ResImage 块格式（来自 ResImage.SetData）：
+    //   +0x00  Type        1字节
+    //   +0x01  Index       1字节
+    //   +0x02  Width       1字节（像素宽）
+    //   +0x03  Height      1字节（像素高）
+    //   +0x04  Number      1字节（切片数量）
+    //   +0x05  Mode        1字节（1=不透明1bpp, 2=透明2bpp）
+    //   +0x06  PixelData   Number * ceil(Width/8) * Height * Mode 字节
+    //
+    // GetBytesCount（与 ResImage.GetBytesCount() 完全等价）：
+    //   row  = (Width + 7) / 8       // ceil(W/8)，每切片每行字节数
+    //   len  = Number * row * Height * Mode
+    //   size = 6 + len
+    //
+    // 注意：部分块末尾有 0xFF padding 填充到下一个 0x4000 block 边界，
+    //       padding 不属于资源数据，提取时只保存 size 字节。
+    //
+    // 覆盖资源类型：
+    //   resType=7  RES_TIL  tile图片   8条
+    //   resType=8  RES_ACP  角色图片  124条
+    //   resType=9  RES_GDP  道具图片  214条
+
+    private static bool ExtractResImage(int offset, string ext)
+    {
+        if (offset + 6 > buf.Length)
+        {
+            Debug.LogWarning($"[{ext}] offset=0x{offset:X} 块头超出文件范围，跳过");
+            return false;
+        }
+
+        int type = buf[offset];
+        int index = buf[offset + 1] & 0xFF;
+        int width = buf[offset + 2] & 0xFF;
+        int height = buf[offset + 3] & 0xFF;
+        int number = buf[offset + 4] & 0xFF;
+        int mode = buf[offset + 5] & 0xFF;
+
+        // 与 ResImage.SetData 中的 len 计算完全一致：
+        //   int len = Number * (Width/8 + (Width%8!=0?1:0)) * Height * buf[offset+5];
+        int row = (width + 7) / 8;           // ceil(W/8)
+        int dataLen = number * row * height * mode;
+        int totalLen = 6 + dataLen;
+
+        if (totalLen <= 6 && number > 0)
+        {
+            Debug.LogWarning($"[{ext}] offset=0x{offset:X} {type}-{index} dataLen={dataLen} 无效，跳过");
+            return false;
+        }
+
+        if (offset + totalLen > buf.Length)
+        {
+            Debug.LogWarning($"[{ext}] offset=0x{offset:X} {type}-{index} 块长度 {totalLen} 超出文件范围，跳过");
+            return false;
+        }
+
+        byte[] rawBlock = new byte[totalLen];
+        Array.Copy(buf, offset, rawBlock, 0, totalLen);
+
+        string dir = Application.dataPath + $"/../ExRes/{ext}";
+        if (!Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        string savePath = dir + $"/{type}-{index}.{ext}";
+        File.WriteAllBytes(savePath, rawBlock);
+        Debug.Log($"[{ext}] 已保存: {type}-{index}.{ext}  W={width} H={height} num={number} mode={mode}  size={totalLen}  offset=0x{offset:X}");
+        return true;
     }
 
     // ── 工具方法 ──────────────────────────────────────────
