@@ -86,9 +86,10 @@ public class ResExtractor
         int mapSaved = 0, mapSkipped = 0;
         int srsSaved = 0, srsSkipped = 0;
 
-        int tilSaved = 0, tilSkipped = 0, 
-            acpSaved = 0, acpSkipped = 0, 
+        int tilSaved = 0, tilSkipped = 0,
+            acpSaved = 0, acpSkipped = 0,
             gdpSaved = 0, gdpSkipped = 0;
+        int mrsSaved = 0, mrsSkipped = 0;
 
         foreach (var kv in _dataOffset)
         {
@@ -105,24 +106,31 @@ public class ResExtractor
                 if (ExtractMap(offset)) mapSaved++;
                 else mapSkipped++;
             }
-            else if (resType == 5) 
-            { 
-                if (ExtractSrs(offset)) srsSaved++; 
-                else srsSkipped++; 
+            else if (resType == 5)
+            {
+                if (ExtractSrs(offset)) srsSaved++;
+                else srsSkipped++;
             }
-            else if (resType == 7) 
-            { 
-                if (ExtractResImage(offset, "til")) tilSaved++; 
-                else tilSkipped++; 
+            else if (resType == 7)
+            {
+                if (ExtractResImage(offset, "til")) tilSaved++;
+                else tilSkipped++;
             }
-            else if (resType == 8) 
-            { 
-                if (ExtractResImage(offset, "acp")) acpSaved++; 
-                else acpSkipped++; }
-            else if (resType == 9) 
-            { 
-                if (ExtractResImage(offset, "gdp")) gdpSaved++; 
-                else gdpSkipped++; }
+            else if (resType == 8)
+            {
+                if (ExtractResImage(offset, "acp")) acpSaved++;
+                else acpSkipped++;
+            }
+            else if (resType == 9)
+            {
+                if (ExtractResImage(offset, "gdp")) gdpSaved++;
+                else gdpSkipped++;
+            }
+            else if (resType == 4)
+            {
+                if (ExtractMrs(offset)) mrsSaved++;
+                else mrsSkipped++;
+            }
         }
 
         Debug.Log($"gut: 保存 {gutSaved} 个，跳过 {gutSkipped} 个");
@@ -130,6 +138,7 @@ public class ResExtractor
         Debug.Log($"til: 保存 {tilSaved} 个，跳过 {tilSkipped} 个");
         Debug.Log($"acp: 保存 {acpSaved} 个，跳过 {acpSkipped} 个");
         Debug.Log($"gdp: 保存 {gdpSaved} 个，跳过 {gdpSkipped} 个");
+        Debug.Log($"mrs: 保存 {mrsSaved} 个，跳过 {mrsSkipped} 个");
     }
 
     // ── gut 块解析与保存 ──────────────────────────────────
@@ -399,6 +408,81 @@ public class ResExtractor
         string savePath = dir + $"/{type}-{index}.{ext}";
         File.WriteAllBytes(savePath, rawBlock);
         Debug.Log($"[{ext}] 已保存: {type}-{index}.{ext}  W={width} H={height} num={number} mode={mode}  size={totalLen}  offset=0x{offset:X}");
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  ResExtractor.cs — 新增 RES_MRS 魔法资源提取支持
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // MRS 块格式（来自 BaseMagic + 各子类 SetOtherData 逆向）：
+    //
+    //   +0x00        Type         1字节  （魔法大类：1攻击 2增强 3恢复 4辅助 5特殊）
+    //   +0x01        Index        1字节
+    //   +0x02        Power        1字节  （基础效能/威力）
+    //   +0x03        Flags        1字节  （bit7=1 表示群体，其余位保留）
+    //   +0x04        CostMp       1字节  （施展消耗真气）
+    //   +0x05        InitLevel    1字节  （习得等级要求）
+    //   +0x06~+0x10  Name         11字节 （GB2312，\0结尾，0xFF填充）
+    //   +0x11        0xFF         （固定填充）
+    //   +0x12~+0x19  SubclassData 8字节  （各子类 SetOtherData 读取，见下表）
+    //   +0x1A~+0x7E  Description  变长   （GB2312，\0结尾，0xFF填充至+0x7F）
+    //   +0x7F        0xFF
+    //   ─────────────────────────────────────────────────────────────────
+    //   固定大小 = 0x80 = 128 字节（经全部107条二进制验证）
+    //
+    // SubclassData (+0x12~+0x19) 各类型字段含义：
+    //
+    //   Type=1 MagicAttack（攻击型）：
+    //     +0x12~+0x13  AffectHp    int16 LE（>0损伤敌人HP，<0吸取敌人HP）
+    //     +0x14~+0x15  AffectMp    int16 LE（>0损伤敌人MP，<0吸取敌人MP）
+    //     +0x16        AffectDf    uint8  （0~100，敌人防御减弱%）
+    //     +0x17        AffectAt    uint8  （0~100，敌人攻击减弱%）
+    //     +0x18        AffectBuff  uint8  （高4位=持续回合，低4位=毒乱封眠）
+    //     +0x19        AffectSpeed uint8  （0~100，敌人速度减慢%）
+    //
+    //   Type=2 MagicEnhance（增强型）：
+    //     +0x16        Defend       uint8  （0~100，己方防御增强%）
+    //     +0x17        Attack       uint8  （0~100，己方攻击增强%）
+    //     +0x18        EnhanceRound uint8  （高4位=持续回合）
+    //     +0x19        Speed        uint8  （0~100，己方速度增快%）
+    //
+    //   Type=3 MagicRestore（恢复型）：
+    //     +0x12~+0x13  RestoreHp   uint16 LE（0~8000，恢复HP值）
+    //     +0x18        DefendDeBuff uint8  （低4位=可解除的debuff标志）
+    //
+    //   Type=4 MagicAuxiliary（辅助型）：
+    //     +0x12~+0x13  HpPercent   uint16 LE（0~100，起死回生HP恢复%）
+    //
+    //   Type=5 MagicSpecial（特殊型，妙手空空）：
+    //     无额外字段（+0x12~+0x19 保留）
+    //
+    private static bool ExtractMrs(int offset)
+    {
+        // MRS 块固定 128 字节
+        const int TOTAL_LEN = 0x80;
+
+        if (offset + TOTAL_LEN > buf.Length)
+        {
+            Debug.LogWarning($"[mrs] offset=0x{offset:X} 块长度超出文件范围，跳过");
+            return false;
+        }
+
+        int type = buf[offset];
+        int index = buf[offset + 1] & 0xFF;
+
+        byte[] rawBlock = new byte[TOTAL_LEN];
+        Array.Copy(buf, offset, rawBlock, 0, TOTAL_LEN);
+
+        string dir = Application.dataPath + "/../ExRes/mrs";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        // 读取名称供日志输出
+        string name = GetString(buf, offset + 6);
+
+        string savePath = dir + $"/{type}-{index}-{name}.mrs";
+        File.WriteAllBytes(savePath, rawBlock);
+        Debug.Log($"[mrs] 已保存: {type}-{index}.mrs  name={name}  offset=0x{offset:X}");
         return true;
     }
 
