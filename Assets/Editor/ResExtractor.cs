@@ -88,7 +88,8 @@ public class ResExtractor
 
         int tilSaved = 0, tilSkipped = 0,
             acpSaved = 0, acpSkipped = 0,
-            gdpSaved = 0, gdpSkipped = 0;
+            gdpSaved = 0, gdpSkipped = 0,
+            picSaved = 0, picSkipped = 0;
         int mrsSaved = 0, mrsSkipped = 0;
         int grsSaved = 0, grsSkipped = 0;
         int mlrSaved = 0, mlrSkipped = 0;
@@ -109,10 +110,20 @@ public class ResExtractor
                 if (ExtractMap(offset)) mapSaved++;
                 else mapSkipped++;
             }
+            else if (resType == 4)
+            {
+                if (ExtractMrs(offset)) mrsSaved++;
+                else mrsSkipped++;
+            }
             else if (resType == 5)
             {
                 if (ExtractSrs(offset)) srsSaved++;
                 else srsSkipped++;
+            }
+            else if (resType == 6)
+            {
+                if (ExtractGrs(offset)) grsSaved++;
+                else grsSkipped++;
             }
             else if (resType == 7)
             {
@@ -129,16 +140,12 @@ public class ResExtractor
                 if (ExtractResImage(offset, "gdp")) gdpSaved++;
                 else gdpSkipped++;
             }
-            else if (resType == 4)
+            else if (resType == 11) // RES_PIC 杂类图片
             {
-                if (ExtractMrs(offset)) mrsSaved++;
-                else mrsSkipped++;
+                if (ExtractResImage(offset, "pic")) picSaved++;
+                else picSkipped++;
             }
-            else if (resType == 6)
-            {
-                if (ExtractGrs(offset)) grsSaved++;
-                else grsSkipped++;
-            }
+            
             else if (resType == 12) // RES_MLR 链资源（type=1魔法链, type=2升级链）
             {
                 if (ExtractMlr(offset, type)) mlrSaved++;
@@ -151,6 +158,7 @@ public class ResExtractor
         Debug.Log($"til: 保存 {tilSaved} 个，跳过 {tilSkipped} 个");
         Debug.Log($"acp: 保存 {acpSaved} 个，跳过 {acpSkipped} 个");
         Debug.Log($"gdp: 保存 {gdpSaved} 个，跳过 {gdpSkipped} 个");
+        Debug.Log($"pic: 保存 {picSaved} 个，跳过 {picSkipped} 个");
         Debug.Log($"mrs: 保存 {mrsSaved} 个，跳过 {mrsSkipped} 个");
         Debug.Log($"grs: 保存 {grsSaved} 个，跳过 {grsSkipped} 个");
         Debug.Log($"mlr: 保存 {mlrSaved} 个，跳过 {mlrSkipped} 个");
@@ -421,6 +429,10 @@ public class ResExtractor
         }
 
         string savePath = dir + $"/{type}-{index}.{ext}";
+        if(ext == "pic")
+        {
+            savePath = dir + $"/{12}{type:D2}{index:D3}.{ext}";
+        }
         File.WriteAllBytes(savePath, rawBlock);
         Debug.Log($"[{ext}] 已保存: {type}-{index}.{ext}  W={width} H={height} num={number} mode={mode}  size={totalLen}  offset=0x{offset:X}");
         return true;
