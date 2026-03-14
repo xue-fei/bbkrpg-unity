@@ -129,17 +129,26 @@ public class GutCompiler
         int ok = 0, fail = 0;
         foreach (string txtPath in Directory.GetFiles(srcDir, "*.txt"))
         {
-            string name = Path.GetFileNameWithoutExtension(txtPath);
-            string outPath = Path.Combine(outDir, name + ".gut");
+            string stem = Path.GetFileNameWithoutExtension(txtPath);
+            // 从文件名提取 type 和 index（如 "2-1M1-1" → type=2, index=1 → "2-1.gut"）
+            var parts = stem.Split('-');
+            string gutName = stem; // 默认回退到原始文件名
+            if (parts.Length >= 2 && int.TryParse(parts[0], out int t))
+            {
+                string idxDigits = System.Text.RegularExpressions.Regex.Match(parts[1], @"^\d+").Value;
+                if (!string.IsNullOrEmpty(idxDigits))
+                    gutName = $"{t}-{idxDigits}";
+            }
+            string outPath = Path.Combine(outDir, gutName + ".gut");
             try
             {
                 CompileFile(txtPath, outPath);
-                Debug.Log($"[GutCompiler] ✓ {name}.gut");
+                Debug.Log($"[GutCompiler] ✓ {gutName}.gut  (src: {stem})");
                 ok++;
             }
             catch (Exception e)
             {
-                Debug.LogError($"[GutCompiler] ✗ {name}: {e.Message}");
+                Debug.LogError($"[GutCompiler] ✗ {stem}: {e.Message}");
                 fail++;
             }
         }
