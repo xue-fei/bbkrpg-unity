@@ -91,10 +91,12 @@ public class ResExtractor
             gdpSaved = 0, gdpSkipped = 0;
         int mrsSaved = 0, mrsSkipped = 0;
         int grsSaved = 0, grsSkipped = 0;
+        int mlrSaved = 0, mlrSkipped = 0;
 
         foreach (var kv in _dataOffset)
         {
             int resType = (kv.Key >> 16) & 0xFF;
+            int type = (kv.Key >> 8) & 0xFF;
             int offset = kv.Value;
 
             if (resType == 1) // RES_GUT 剧情脚本
@@ -137,6 +139,11 @@ public class ResExtractor
                 if (ExtractGrs(offset)) grsSaved++;
                 else grsSkipped++;
             }
+            else if (resType == 12) // RES_MLR 链资源（type=1魔法链, type=2升级链）
+            {
+                if (ExtractMlr(offset, type)) mlrSaved++;
+                else mlrSkipped++;
+            }
         }
 
         Debug.Log($"gut: 保存 {gutSaved} 个，跳过 {gutSkipped} 个");
@@ -146,6 +153,7 @@ public class ResExtractor
         Debug.Log($"gdp: 保存 {gdpSaved} 个，跳过 {gdpSkipped} 个");
         Debug.Log($"mrs: 保存 {mrsSaved} 个，跳过 {mrsSkipped} 个");
         Debug.Log($"grs: 保存 {grsSaved} 个，跳过 {grsSkipped} 个");
+        Debug.Log($"mlr: 保存 {mlrSaved} 个，跳过 {mlrSkipped} 个");
     }
 
     // ── gut 块解析与保存 ──────────────────────────────────
@@ -572,6 +580,97 @@ public class ResExtractor
         string savePath = dir + $"/{type}-{index}-{name}.grs";
         File.WriteAllBytes(savePath, rawBlock);
         Debug.Log($"[grs] 已保存: {type}-{index}.grs  name={name}  offset=0x{offset:X}");
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  ResExtractor.cs — RES_MLR (resType=12) 链资源提取
+    //  type=1  ResMagicChain   魔法链
+    //  type=2  ResLevelupChain 升级链
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    // ── 魔法链块格式（二进制验证，如 怪妖坛子-15.mlr）：
+    //   +0x00  Type        1字节  （固定=1）
+    //   +0x01  Index       1字节
+    //   +0x02  MaxLevel    1字节
+    //   +0x03  ChainData   MaxLevel × 2 字节（每级2字节，魔法索引等）
+    //   totalLen = 3 + MaxLevel × 2
+    //
+    // ── 升级链块格式（来自 ResLevelupChain.SetData）：
+    //   +0x00  Type        1字节  （固定=2）
+    //   +0x01  Index       1字节
+    //   +0x02  MaxLevel    1字节
+    //   +0x03  (填充)      1字节
+    //   +0x04  LevelData   MaxLevel × 20 字节
+    //   totalLen = 4 + MaxLevel × 20
+    //
+    //   每级20字节布局（偏移相对于该级起始）：
+    //   +0x00~+0x01  MaxHP         uint16 LE
+    //   +0x02~+0x03  HP            uint16 LE
+    //   +0x04~+0x05  MaxMP         uint16 LE
+    //   +0x06~+0x07  MP            uint16 LE
+    //   +0x08~+0x09  Attack        uint16 LE
+    //   +0x0A~+0x0B  Defend        uint16 LE
+    //   +0x0C~+0x0D  (保留)        uint16 LE
+    //   +0x0E~+0x0F  NextLevelExp  uint16 LE
+    //   +0x10~+0x11  (保留)        uint16 LE
+    //   +0x12        Speed         uint8
+    //   +0x13        Lingli        uint8
+    //   +0x14        Luck          uint8
+    //   +0x15        LearnMagicNum uint8
+    //
+    private static bool ExtractMlr(int offset, int subType)
+    {
+        if (offset + 3 > buf.Length)
+        {
+            Debug.LogWarning($"[mlr] offset=0x{offset:X} 块头超出文件范围，跳过");
+            return false;
+        }
+
+        int type = buf[offset] & 0xFF;
+        int index = buf[offset + 1] & 0xFF;
+        int maxLevel = buf[offset + 2] & 0xFF;
+
+        if (maxLevel <= 0)
+        {
+            Debug.LogWarning($"[mlr] offset=0x{offset:X} {type}-{index} maxLevel={maxLevel} 无效，跳过");
+            return false;
+        }
+
+        int totalLen;
+        string subName;
+
+        if (subType == 1) // ResMagicChain 魔法链：header=3字节，每级2字节
+        {
+            totalLen = 3 + maxLevel * 2;
+            subName = "magic";
+        }
+        else if (subType == 2) // ResLevelupChain 升级链：header=4字节（含1字节填充），每级20字节
+        {
+            totalLen = 4 + maxLevel * 20;
+            subName = "levelup";
+        }
+        else
+        {
+            Debug.LogWarning($"[mlr] offset=0x{offset:X} 未知子类型 subType={subType}，跳过");
+            return false;
+        }
+
+        if (offset + totalLen > buf.Length)
+        {
+            Debug.LogWarning($"[mlr] offset=0x{offset:X} {type}-{index} 块长度 {totalLen} 超出文件范围，跳过");
+            return false;
+        }
+
+        byte[] rawBlock = new byte[totalLen];
+        Array.Copy(buf, offset, rawBlock, 0, totalLen);
+
+        string dir = Application.dataPath + "/../ExRes/mlr";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        string savePath = dir + $"/{type}-{index}.mlr";
+        File.WriteAllBytes(savePath, rawBlock);
+        Debug.Log($"[mlr] 已保存: {type}-{index}.mlr  sub={subName}  maxLevel={maxLevel}  size={totalLen}  offset=0x{offset:X}");
         return true;
     }
 
