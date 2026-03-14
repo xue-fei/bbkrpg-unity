@@ -2,7 +2,7 @@ namespace BBKRPGSimulator.Combat.Actions
 {
     internal class CalcDamage
     {
-        #region ·½·¨
+        #region Ð¸Ð¹Ð¸Ðµ
 
         public static int CalcBaseDamage(int attack, int defense)
         {
@@ -24,7 +24,7 @@ namespace BBKRPGSimulator.Combat.Actions
             return damage;
         }
 
-        #endregion ·½·¨
+        #endregion Ð¸Ð¹Ð¸Ðµ
 
         //	public static int calcMagicDamage(int )
     }

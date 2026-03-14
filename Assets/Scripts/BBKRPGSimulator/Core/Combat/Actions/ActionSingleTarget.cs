@@ -5,28 +5,28 @@ using BBKRPGSimulator.Graphics;
 namespace BBKRPGSimulator.Combat.Actions
 {
     /// <summary>
-    /// µ¥Ä¿±ê¶¯×÷
+    /// å•ç›®æ ‡åŠ¨ä½œ
     /// </summary>
     internal abstract class ActionSingleTarget : ActionBase
     {
-        #region ×Ö¶Î
+        #region å­—æ®µ
 
         /// <summary>
-        /// Æ¯¸¡¶¯»­
+        /// æ¼‚æµ®åŠ¨ç”»
         /// </summary>
         protected RaiseAnimation RaiseAnimation { get; set; }
 
         /// <summary>
-        /// Ä¿±ê
+        /// ç›®æ ‡
         /// </summary>
         protected FightingCharacter Target { get; set; }
 
-        #endregion ×Ö¶Î
+        #endregion å­—æ®µ
 
-        #region ¹¹Ôìº¯Êı
+        #region æ„é€ å‡½æ•°
 
         /// <summary>
-        /// µ¥Ä¿±ê¶¯×÷
+        /// å•ç›®æ ‡åŠ¨ä½œ
         /// </summary>
         /// <param name="context"></param>
         /// <param name="attacker"></param>
@@ -37,9 +37,9 @@ namespace BBKRPGSimulator.Combat.Actions
             Target = target;
         }
 
-        #endregion ¹¹Ôìº¯Êı
+        #endregion æ„é€ å‡½æ•°
 
-        #region ·½·¨
+        #region æ–¹æ³•
 
         public override bool IsTargetAlive()
         {
@@ -79,6 +79,6 @@ namespace BBKRPGSimulator.Combat.Actions
             return RaiseAnimation != null && RaiseAnimation.Update(delta);
         }
 
-        #endregion ·½·¨
+        #endregion æ–¹æ³•
     }
 }

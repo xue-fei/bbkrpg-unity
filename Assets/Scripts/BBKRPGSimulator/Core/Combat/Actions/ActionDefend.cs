@@ -4,19 +4,19 @@ using BBKRPGSimulator.Graphics;
 namespace BBKRPGSimulator.Combat.Actions
 {
     /// <summary>
-    /// ·ÀÓù¶¯×÷
+    /// é˜²å¾¡åŠ¨ä½œ
     /// </summary>
     internal class ActionDefend : ActionSingleTarget
     {
-        #region ¹¹Ôìº¯Êı
+        #region æ„é€ å‡½æ•°
 
         public ActionDefend(SimulatorContext context, FightingCharacter fc) : base(context, fc, null)
         {
         }
 
-        #endregion ¹¹Ôìº¯Êı
+        #endregion æ„é€ å‡½æ•°
 
-        #region ·½·¨
+        #region æ–¹æ³•
 
         public override void Draw(ICanvas canvas)
         {
@@ -52,7 +52,7 @@ namespace BBKRPGSimulator.Combat.Actions
 
         public override string ToString()
         {
-            return $"¡¾{Executor.Name}¡¿µÄ·ÀÓù";
+            return $"ã€{Executor.Name}ã€‘çš„é˜²å¾¡";
         }
 
         public override bool Update(long delta)
@@ -60,6 +60,6 @@ namespace BBKRPGSimulator.Combat.Actions
             return false;
         }
 
-        #endregion ·½·¨
+        #endregion æ–¹æ³•
     }
 }
