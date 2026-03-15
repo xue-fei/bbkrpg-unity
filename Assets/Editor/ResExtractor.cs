@@ -85,6 +85,7 @@ public class ResExtractor
         int gutSaved = 0, gutSkipped = 0;
         int mapSaved = 0, mapSkipped = 0;
         int srsSaved = 0, srsSkipped = 0;
+        int arsSaved = 0, arsSkipped = 0;
 
         int tilSaved = 0, tilSkipped = 0,
             acpSaved = 0, acpSkipped = 0,
@@ -109,6 +110,11 @@ public class ResExtractor
             {
                 if (ExtractMap(offset)) mapSaved++;
                 else mapSkipped++;
+            }
+            else if (resType == 3) // RES_ARS 角色资源（玩家/NPC/怪物/场景对象）
+            {
+                if (ExtractArs(offset, type)) arsSaved++;
+                else arsSkipped++;
             }
             else if (resType == 4)
             {
@@ -683,6 +689,243 @@ public class ResExtractor
         string savePath = dir + $"/{type}-{index}.mlr";
         File.WriteAllBytes(savePath, rawBlock);
         Debug.Log($"[mlr] 已保存: {type}-{index}.mlr  sub={subName}  maxLevel={maxLevel}  size={totalLen}  offset=0x{offset:X}");
+        return true;
+    }
+
+    // ── ars 块解析与保存 ──────────────────────────────────
+    // ARS 块格式（resType=3），按 subType 分为四类：
+    //
+    //   subType=1  PlayerCharacter（玩家角色）
+    //   ─────────────────────────────────────────────────────
+    //   +0x00        Type             1字节  （固定=1）
+    //   +0x01        Index            1字节
+    //   +0x02        FaceDir          1字节  （1=北 2=东 3=南 4=西）
+    //   +0x03        Step             1字节  （步态帧）
+    //   +0x04        ?                1字节
+    //   +0x05        PosX             1字节  （地图初始坐标X）
+    //   +0x06        PosY             1字节  （地图初始坐标Y）
+    //   +0x07~+0x08  ?                2字节
+    //   +0x09        MagicLearnLvl    1字节  （MagicChain.LearnFromChain参数）
+    //   +0x0A~+0x19  Name             16字节 （GB2312，\0结尾，0xCC/0xFF填充）
+    //   +0x1A~+0x1D  ?                4字节
+    //   +0x1B        EquipBody        1字节  （type=2装备索引，0=无）
+    //   +0x1C        EquipWeapon      1字节  （type=7装备索引，0=无）
+    //   +0x1D        EquipFoot        1字节  （type=3装备索引，0=无）
+    //   +0x1E        EquipDeco0       1字节  （type=6装饰槽0，0=无）
+    //   +0x1F        EquipDeco1       1字节  （type=6装饰槽1，0=无）
+    //   +0x1A        EquipWrist       1字节  （type=5装备索引，0=无）  [sic, before 0x1B]
+    //   +0x18        EquipHead        1字节  （type=1装备索引，0=无）
+    //   +0x19        EquipBody2       1字节  （type=2装备索引，0=无）
+    //   +0x1A        EquipWrist       1字节  （type=5护腕）
+    //   +0x1B        EquipBody        1字节  （type=2护身）
+    //   +0x1C        EquipWeapon      1字节  （type=7武器）
+    //   +0x1D        EquipFoot        1字节  （type=3护脚）
+    //   +0x1E        EquipDeco0       1字节  （type=6装饰）
+    //   +0x1F        EquipDeco1       1字节  （type=6装饰）
+    //   +0x20        Level            1字节
+    //   +0x26~+0x27  MaxHP            uint16 LE
+    //   +0x28~+0x29  HP               uint16 LE
+    //   +0x2A~+0x2B  MaxMP            uint16 LE
+    //   +0x2C~+0x2D  MP               uint16 LE
+    //   +0x2E~+0x2F  Attack           uint16 LE
+    //   +0x30~+0x31  Defend           uint16 LE
+    //   +0x32~+0x33  CurrentExp       uint16 LE
+    //   +0x36        Speed            1字节
+    //   +0x37        Lingli           1字节
+    //   +0x38        Luck             1字节
+    //   totalLen = 0x39（最后读取 +0x38）
+    //
+    //   subType=2  NPC
+    //   ─────────────────────────────────────────────────────
+    //   +0x00        Type             1字节  （固定=2）
+    //   +0x01        Index            1字节
+    //   +0x02        FaceDir          1字节  （1=北 2=东 3=南 4=西）
+    //   +0x03        Step             1字节
+    //   +0x04        ActionState      1字节
+    //   +0x09~       Name             GB2312，\0结尾
+    //   +0x15        Delay            1字节  （0=停止, >0=行走延时）
+    //   +0x16        WalkingSpriteId  1字节
+    //   totalLen = 0x17
+    //
+    //   subType=3  Monster（怪物）
+    //   ─────────────────────────────────────────────────────
+    //   +0x00        Type             1字节  （固定=3）
+    //   +0x01        Index            1字节
+    //   +0x02        MagicLearnLvl    1字节
+    //   +0x03        Buff (免疫)      1字节
+    //   +0x04        AttackBuff       1字节
+    //   +0x06~       Name             GB2312，\0结尾，\xCC/\xFF填充
+    //   +0x12        Level            1字节
+    //   +0x13        Speed            1字节
+    //   +0x14        Lingli           1字节
+    //   +0x15        MonsterIQ        1字节
+    //   +0x16        Luck             1字节
+    //   +0x17        BuffLastRound    1字节
+    //   +0x18~+0x19  MaxHP            uint16 LE
+    //   +0x1A~+0x1B  HP               uint16 LE
+    //   +0x1C~+0x1D  MaxMP            uint16 LE
+    //   +0x1E~+0x1F  MP               uint16 LE
+    //   +0x20~+0x21  Attack           uint16 LE
+    //   +0x22~+0x23  Defend           uint16 LE
+    //   +0x24~+0x25  Money            uint16 LE
+    //   +0x26~+0x27  EXP              uint16 LE
+    //   +0x28        carryGoods[0]    1字节（道具大类 type）
+    //   +0x29        carryGoods[1]    1字节（道具索引 index）
+    //   +0x2A        carryGoods[2]    1字节（数量 num）
+    //   +0x2B        dropGoods[0]     1字节（道具大类 type）
+    //   +0x2C        dropGoods[1]     1字节（道具索引 index）
+    //   +0x2D        dropGoods[2]     1字节（数量 num）
+    //   +0x2E        FightSpriteIdx   1字节
+    //   +0x2F        MagicChainIdx    1字节
+    //   totalLen = 0x30
+    //
+    //   subType=4  SceneObj（场景对象）
+    //   无专用 SetData 逆向，按与怪物类似的固定块估算，跳过或原始保存
+    //
+    private static bool ExtractArs(int offset, int subType)
+    {
+        switch (subType)
+        {
+            case 1: return ExtractArsPlayer(offset);
+            case 2: return ExtractArsNpc(offset);
+            case 3: return ExtractArsMonster(offset);
+            case 4: return ExtractArsSceneObj(offset);
+            default:
+                Debug.LogWarning($"[ars] offset=0x{offset:X} 未知子类型 subType={subType}，跳过");
+                return false;
+        }
+    }
+
+    // ── ars/player 玩家角色块 ──────────────────────────────
+    // 固定大小 = 0x39 字节（最后读取字段 Luck 在 +0x38）
+    private static bool ExtractArsPlayer(int offset)
+    {
+        const int TOTAL_LEN = 0x39;
+
+        if (offset + TOTAL_LEN > buf.Length)
+        {
+            Debug.LogWarning($"[ars/player] offset=0x{offset:X} 块长度超出文件范围，跳过");
+            return false;
+        }
+
+        int type = buf[offset] & 0xFF;  // ==1
+        int index = buf[offset + 1] & 0xFF;
+
+        // 名称：+0x0A 开始，GB2312，\0 结尾
+        string name = GetString(buf, offset + 0x0A);
+
+        int level = buf[offset + 0x20] & 0xFF;
+        int maxHP = (buf[offset + 0x27] << 8) | buf[offset + 0x26];
+        int attack = (buf[offset + 0x2F] << 8) | buf[offset + 0x2E];
+        int defend = (buf[offset + 0x31] << 8) | buf[offset + 0x30];
+
+        byte[] rawBlock = new byte[TOTAL_LEN];
+        Array.Copy(buf, offset, rawBlock, 0, TOTAL_LEN);
+
+        string dir = Application.dataPath + "/../ExRes/ars";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        string savePath = dir + $"/{type}-{index}-{name}.ars";
+        File.WriteAllBytes(savePath, rawBlock);
+        Debug.Log($"[ars/player] 已保存: {type}-{index}-{name}.ars  lv={level} maxHP={maxHP} atk={attack} def={defend}  size={TOTAL_LEN}  offset=0x{offset:X}");
+        return true;
+    }
+
+    // ── ars/npc NPC 角色块 ────────────────────────────────
+    // 固定大小 = 0x17 字节（最后读取字段 WalkingSpriteId 在 +0x16）
+    private static bool ExtractArsNpc(int offset)
+    {
+        const int TOTAL_LEN = 0x17;
+
+        if (offset + TOTAL_LEN > buf.Length)
+        {
+            Debug.LogWarning($"[ars/npc] offset=0x{offset:X} 块长度超出文件范围，跳过");
+            return false;
+        }
+
+        int type = buf[offset] & 0xFF;  // ==2
+        int index = buf[offset + 1] & 0xFF;
+
+        // 名称：+0x09 开始，GB2312，\0 结尾
+        string name = GetString(buf, offset + 0x09);
+
+        int delay = buf[offset + 0x15] & 0xFF;
+        int walkSpriteId = buf[offset + 0x16] & 0xFF;
+
+        byte[] rawBlock = new byte[TOTAL_LEN];
+        Array.Copy(buf, offset, rawBlock, 0, TOTAL_LEN);
+
+        string dir = Application.dataPath + "/../ExRes/ars";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        string savePath = dir + $"/{type}-{index}-{name}.ars";
+        File.WriteAllBytes(savePath, rawBlock);
+        Debug.Log($"[ars/npc] 已保存: {type}-{index}-{name}.ars  delay={delay} walkSprite={walkSpriteId}  size={TOTAL_LEN}  offset=0x{offset:X}");
+        return true;
+    }
+
+    // ── ars/monster 怪物块 ────────────────────────────────
+    // 固定大小 = 0x30 字节（最后读取字段 MagicChainIdx 在 +0x2F）
+    // 经二进制样本 诛仙.ars 完整验证
+    private static bool ExtractArsMonster(int offset)
+    {
+        const int TOTAL_LEN = 0x30;
+
+        if (offset + TOTAL_LEN > buf.Length)
+        {
+            Debug.LogWarning($"[ars/monster] offset=0x{offset:X} 块长度超出文件范围，跳过");
+            return false;
+        }
+
+        int type = buf[offset] & 0xFF;  // ==3
+        int index = buf[offset + 1] & 0xFF;
+
+        // 名称：+0x06 开始，GB2312，\0 结尾
+        string name = GetString(buf, offset + 0x06);
+
+        int level = buf[offset + 0x12] & 0xFF;
+        int maxHP = (buf[offset + 0x19] << 8) | buf[offset + 0x18];
+        int attack = (buf[offset + 0x21] << 8) | buf[offset + 0x20];
+        int defend = (buf[offset + 0x23] << 8) | buf[offset + 0x22];
+        int money = (buf[offset + 0x25] << 8) | buf[offset + 0x24];
+        int exp = (buf[offset + 0x27] << 8) | buf[offset + 0x26];
+
+        byte[] rawBlock = new byte[TOTAL_LEN];
+        Array.Copy(buf, offset, rawBlock, 0, TOTAL_LEN);
+
+        string dir = Application.dataPath + "/../ExRes/ars";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        string savePath = dir + $"/{type}-{index}-{name}.ars";
+        File.WriteAllBytes(savePath, rawBlock);
+        Debug.Log($"[ars/monster] 已保存: {type}-{index}-{name}.ars  lv={level} maxHP={maxHP} atk={attack} def={defend} money={money} exp={exp}  size={TOTAL_LEN}  offset=0x{offset:X}");
+        return true;
+    }
+
+    // ── ars/sceneobj 场景对象块 ───────────────────────────
+    // SceneObj 无专用 SetData 逆向，按与 NPC 块相同的最小保守长度（0x17）原始保存
+    private static bool ExtractArsSceneObj(int offset)
+    {
+        const int TOTAL_LEN = 0x17;
+
+        if (offset + TOTAL_LEN > buf.Length)
+        {
+            Debug.LogWarning($"[ars/sceneobj] offset=0x{offset:X} 块长度超出文件范围，跳过");
+            return false;
+        }
+
+        int type = buf[offset] & 0xFF;  // ==4
+        int index = buf[offset + 1] & 0xFF;
+
+        byte[] rawBlock = new byte[TOTAL_LEN];
+        Array.Copy(buf, offset, rawBlock, 0, TOTAL_LEN);
+
+        string dir = Application.dataPath + "/../ExRes/ars";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        string savePath = dir + $"/{type}-{index}.ars";
+        File.WriteAllBytes(savePath, rawBlock);
+        Debug.Log($"[ars/sceneobj] 已保存: {type}-{index}.ars  size={TOTAL_LEN}  offset=0x{offset:X}");
         return true;
     }
 
