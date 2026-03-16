@@ -68,8 +68,9 @@ public class SrsEditor : EditorWindow
     private List<ActiveFrame> _showList = new List<ActiveFrame>();
     private bool _isPlaying;
     private bool _looping = true;
-    private float _tickInterval = 0.05f;  // 每 tick 对应的真实时间（秒）
+    private float _tickInterval = 0.1f;   // 每 tick 对应的真实时间（秒，默认 10 tick/s）
     private float _speed = 1f;     // 播放速度倍率
+    private double _lastUpdateTime;        // EditorApplication.timeSinceStartup 上次记录值
     private float _timeSinceLastTick;
     private int _totalTick;             // 已播放 tick 数（用于进度显示）
     private int _estimatedTotalTicks;   // 动画总长度估算
@@ -84,6 +85,15 @@ public class SrsEditor : EditorWindow
 
     // 手动浏览（暂停时单步）
     private int _manualTick;
+
+    // 渲染模式：对应 ResSrs 的两种 Draw 方式
+    //   Draw         — 帧坐标直接用作绝对位置（含 dx/dy 偏移，编辑器 dx=dy=0）
+    //   DrawAbsolutely — 帧坐标相对 frame[0] 偏移（全屏/居中特效使用此方式）
+    private bool _drawAbsolutely = false;
+    // frame[0] 的坐标，DrawAbsolutely 时用作锚点
+    private int _anchorX, _anchorY;
+    // DrawAbsolutely 模式下的包围盒（相对坐标）
+    private int _absCanvasW, _absCanvasH;
 
     // 背景色
     private static readonly Color BgColor = new Color(0.15f, 0.15f, 0.15f);
@@ -126,19 +136,38 @@ public class SrsEditor : EditorWindow
     {
         if (!_isPlaying || _frameHeader == null) return;
 
-        _timeSinceLastTick += Time.deltaTime * _speed;
-        if (_timeSinceLastTick >= _tickInterval)
+        // Editor 中 Time.deltaTime 不可靠（静止时为0），改用 timeSinceStartup 差值
+        double now = EditorApplication.timeSinceStartup;
+        float delta = (float)(now - _lastUpdateTime);
+        _lastUpdateTime = now;
+
+        // delta 异常保护（首帧、切后台、极大值）
+        if (delta <= 0f || delta > 1f) return;
+
+        _timeSinceLastTick += delta * _speed;
+
+        // 单次 OnEditorUpdate 可能累积多个 tick（速度较快时），逐一步进
+        while (_timeSinceLastTick >= _tickInterval)
         {
             _timeSinceLastTick -= _tickInterval;
             bool alive = StepTick();
             if (!alive)
             {
-                if (_looping) StartAni();
-                else _isPlaying = false;
+                if (_looping)
+                {
+                    StartAni();
+                }
+                else
+                {
+                    _isPlaying = false;
+                    _timeSinceLastTick = 0f;
+                    break;
+                }
             }
-            RenderFrame();
-            Repaint();
         }
+
+        RenderFrame();
+        Repaint();
     }
 
     // ══════════════════════════════════════════════════════
@@ -181,6 +210,17 @@ public class SrsEditor : EditorWindow
 
         // 循环开关
         _looping = GUILayout.Toggle(_looping, "循环", EditorStyles.toolbarButton, GUILayout.Width(40));
+
+        GUILayout.Space(4);
+
+        // 渲染模式切换
+        bool newMode = GUILayout.Toggle(_drawAbsolutely, "居中(DrawAbsolutely)", EditorStyles.toolbarButton, GUILayout.Width(140));
+        if (newMode != _drawAbsolutely)
+        {
+            _drawAbsolutely = newMode;
+            RenderFrame();
+        }
+
         EditorGUI.EndDisabledGroup();
 
         GUILayout.Space(8);
@@ -208,7 +248,8 @@ public class SrsEditor : EditorWindow
         EditorGUILayout.LabelField(
             $"Type={_srsType}  Index={_srsIndex}  " +
             $"帧数={_frameCount}  图片数={_imageCount}  " +
-            $"画布={_canvasW}×{_canvasH}  " +
+            $"画布(Draw)={_canvasW}×{_canvasH}  " +
+            $"画布(居中)={_absCanvasW}×{_absCanvasH}  " +
             $"估计总长={_estimatedTotalTicks} ticks");
         EditorGUILayout.EndVertical();
     }
@@ -311,6 +352,21 @@ public class SrsEditor : EditorWindow
     {
         if (_frameTex == null) return;
 
+        // 当前活跃帧提示（多帧叠加是原游戏正常行为：showList 中所有帧同时绘制）
+        if (_showList.Count > 0)
+        {
+            var indices = new System.Text.StringBuilder();
+            foreach (var af in _showList)
+                indices.Append(af.FrameIdx).Append(' ');
+            EditorGUILayout.LabelField(
+                $"当前活跃帧：{_showList.Count} 个（帧索引：{indices}）— 多帧叠加为正常的特效行为",
+                EditorStyles.miniLabel);
+        }
+        else
+        {
+            EditorGUILayout.LabelField("（无活跃帧）", EditorStyles.miniLabel);
+        }
+
         _scroll = EditorGUILayout.BeginScrollView(_scroll);
         Rect r = GUILayoutUtility.GetRect(
             _frameTex.width * _zoom,
@@ -399,7 +455,7 @@ public class SrsEditor : EditorWindow
             ptr += imgSize;
         }
 
-        // ── 计算画布包围盒 ────────────────────────────────
+        // ── 计算画布包围盒（绝对坐标，对应 Draw）────────────
         _canvasW = 1; _canvasH = 1;
         for (int i = 0; i < _frameCount; i++)
         {
@@ -408,6 +464,30 @@ public class SrsEditor : EditorWindow
             _canvasW = Mathf.Max(_canvasW, _frameHeader[i, 0] + _images[imgIdx].Width);
             _canvasH = Mathf.Max(_canvasH, _frameHeader[i, 1] + _images[imgIdx].Height);
         }
+
+        // ── 计算居中包围盒（相对坐标，对应 DrawAbsolutely）──
+        // DrawAbsolutely: 每帧坐标 = frameHeader[i].(x,y) - frameHeader[0].(x,y)
+        // 因此相对坐标可为负，需先求整体范围再平移到 (0,0)
+        _anchorX = _frameCount > 0 ? _frameHeader[0, 0] : 0;
+        _anchorY = _frameCount > 0 ? _frameHeader[0, 1] : 0;
+        int relMinX = 0, relMinY = 0, relMaxX = 1, relMaxY = 1;
+        for (int i = 0; i < _frameCount; i++)
+        {
+            int imgIdx = _frameHeader[i, 4];
+            if (imgIdx >= _imageCount) continue;
+            int rx = _frameHeader[i, 0] - _anchorX;
+            int ry = _frameHeader[i, 1] - _anchorY;
+            relMinX = Mathf.Min(relMinX, rx);
+            relMinY = Mathf.Min(relMinY, ry);
+            relMaxX = Mathf.Max(relMaxX, rx + _images[imgIdx].Width);
+            relMaxY = Mathf.Max(relMaxY, ry + _images[imgIdx].Height);
+        }
+        _absCanvasW = Mathf.Max(1, relMaxX - relMinX);
+        _absCanvasH = Mathf.Max(1, relMaxY - relMinY);
+        // 如果存在负相对坐标，需要整体右移/下移，把偏移记到 _anchorX/Y 中
+        // 等价于：渲染时帧实际偏移 = (fx - _anchorX - relMinX)
+        _anchorX += relMinX;   // 吸收负偏移，使所有相对坐标 >= 0
+        _anchorY += relMinY;
 
         // ── 估算总 tick 长度 ──────────────────────────────
         // 最后一帧的启动时刻 + 该帧的 show 值
@@ -438,6 +518,7 @@ public class SrsEditor : EditorWindow
         {
             _isPlaying = true;
             _timeSinceLastTick = 0f;
+            _lastUpdateTime = EditorApplication.timeSinceStartup;
             // 若已播完则从头开始
             if (_showList.Count == 0)
                 StartAni();
@@ -463,12 +544,14 @@ public class SrsEditor : EditorWindow
             _showList.Add(new ActiveFrame(_frameHeader, 0));
     }
 
-    // 模拟 ResSrs.Update 单步（返回 false = 动画播完）
+    // 模拟 ResSrs.Update 单步，与原版逻辑逐行对应（返回 false = 动画播完）
     private bool StepTick()
     {
         ++_totalTick;
 
-        // Pass1：更新计数，触发下一帧
+        // Pass1：与原版 for 循环完全一致
+        //   --current.Show; --current.NShow;
+        //   if (NShow == 0 && Index+1 < frameCount) showList.Add(next)
         for (int i = 0; i < _showList.Count; i++)
         {
             var cur = _showList[i];
@@ -478,10 +561,16 @@ public class SrsEditor : EditorWindow
                 _showList.Add(new ActiveFrame(_frameHeader, cur.FrameIdx + 1));
         }
 
-        // Pass2：移除已结束帧
-        for (int i = _showList.Count - 1; i >= 0; i--)
+        // Pass2：与原版 for 循环完全一致
+        //   if (current.Show <= 0) { RemoveAt(i); i--; }
+        for (int i = 0; i < _showList.Count; i++)
+        {
             if (_showList[i].Show <= 0)
+            {
                 _showList.RemoveAt(i);
+                i--;
+            }
+        }
 
         return _showList.Count > 0;
     }
@@ -505,13 +594,21 @@ public class SrsEditor : EditorWindow
 
     // ══════════════════════════════════════════════════════
     //  渲染当前 showList → _frameTex
+    //  对应 ResSrs 两种绘制方法：
+    //    Draw          : ox = frameHeader[fi].(x,y)            （绝对坐标）
+    //    DrawAbsolutely: ox = frameHeader[fi].(x,y) - anchor   （相对 frame[0] 偏移）
     // ══════════════════════════════════════════════════════
     private void RenderFrame()
     {
         if (_frameHeader == null || _images == null) return;
 
+        int cw = _drawAbsolutely ? _absCanvasW : _canvasW;
+        int ch = _drawAbsolutely ? _absCanvasH : _canvasH;
+        cw = Mathf.Max(1, cw);
+        ch = Mathf.Max(1, ch);
+
         // 填充背景
-        Color[] canvas = new Color[_canvasW * _canvasH];
+        Color[] canvas = new Color[cw * ch];
         for (int i = 0; i < canvas.Length; i++) canvas[i] = BgColor;
 
         // 将 showList 中所有活跃帧合成到画布
@@ -524,35 +621,43 @@ public class SrsEditor : EditorWindow
             DecodedImage img = _images[imgIdx];
             if (img.Pixels == null) continue;
 
-            int ox = _frameHeader[fi, 0];
-            int oy = _frameHeader[fi, 1];
+            // 根据渲染模式计算帧在画布上的偏移
+            int ox, oy;
+            if (_drawAbsolutely)
+            {
+                // 对应 DrawAbsolutely：帧坐标 - frame[0]坐标（anchor 已包含负偏移修正）
+                ox = _frameHeader[fi, 0] - _anchorX;
+                oy = _frameHeader[fi, 1] - _anchorY;
+            }
+            else
+            {
+                // 对应 Draw：直接用帧的绝对坐标
+                ox = _frameHeader[fi, 0];
+                oy = _frameHeader[fi, 1];
+            }
 
-            // img.Pixels 是图像坐标（左上原点），逐像素贴到 canvas（也用图像坐标，最后统一翻转）
             for (int py = 0; py < img.Height; py++)
                 for (int px = 0; px < img.Width; px++)
                 {
                     int cx = ox + px;
                     int cy = oy + py;
-                    if (cx < 0 || cy < 0 || cx >= _canvasW || cy >= _canvasH) continue;
+                    if (cx < 0 || cy < 0 || cx >= cw || cy >= ch) continue;
 
                     Color c = img.Pixels[py * img.Width + px];
                     if (c != TranspColor)
-                        canvas[cy * _canvasW + cx] = c;
+                        canvas[cy * cw + cx] = c;
                 }
         }
 
         // 翻转整张 canvas（图像坐标→Unity 左下原点）
-        Color[] flipped = new Color[_canvasW * _canvasH];
-        for (int y = 0; y < _canvasH; y++)
-            System.Array.Copy(canvas, y * _canvasW,
-                flipped, (_canvasH - 1 - y) * _canvasW, _canvasW);
+        Color[] flipped = new Color[cw * ch];
+        for (int y = 0; y < ch; y++)
+            System.Array.Copy(canvas, y * cw, flipped, (ch - 1 - y) * cw, cw);
 
-        if (_frameTex == null
-            || _frameTex.width != _canvasW
-            || _frameTex.height != _canvasH)
+        if (_frameTex == null || _frameTex.width != cw || _frameTex.height != ch)
         {
             if (_frameTex != null) DestroyImmediate(_frameTex);
-            _frameTex = new Texture2D(_canvasW, _canvasH, TextureFormat.RGBA32, false)
+            _frameTex = new Texture2D(cw, ch, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp
