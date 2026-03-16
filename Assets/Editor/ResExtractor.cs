@@ -151,7 +151,7 @@ public class ResExtractor
                 if (ExtractResImage(offset, "pic")) picSaved++;
                 else picSkipped++;
             }
-            
+
             else if (resType == 12) // RES_MLR 链资源（type=1魔法链, type=2升级链）
             {
                 if (ExtractMlr(offset, type)) mlrSaved++;
@@ -161,12 +161,14 @@ public class ResExtractor
 
         Debug.Log($"gut: 保存 {gutSaved} 个，跳过 {gutSkipped} 个");
         Debug.Log($"map: 保存 {mapSaved} 个，跳过 {mapSkipped} 个");
+        Debug.Log($"ars: 保存 {arsSaved} 个，跳过 {arsSkipped} 个");
+        Debug.Log($"mrs: 保存 {mrsSaved} 个，跳过 {mrsSkipped} 个");
+        Debug.Log($"srs: 保存 {srsSaved} 个，跳过 {srsSkipped} 个");
+        Debug.Log($"grs: 保存 {grsSaved} 个，跳过 {grsSkipped} 个");
         Debug.Log($"til: 保存 {tilSaved} 个，跳过 {tilSkipped} 个");
         Debug.Log($"acp: 保存 {acpSaved} 个，跳过 {acpSkipped} 个");
         Debug.Log($"gdp: 保存 {gdpSaved} 个，跳过 {gdpSkipped} 个");
         Debug.Log($"pic: 保存 {picSaved} 个，跳过 {picSkipped} 个");
-        Debug.Log($"mrs: 保存 {mrsSaved} 个，跳过 {mrsSkipped} 个");
-        Debug.Log($"grs: 保存 {grsSaved} 个，跳过 {grsSkipped} 个");
         Debug.Log($"mlr: 保存 {mlrSaved} 个，跳过 {mlrSkipped} 个");
     }
 
@@ -435,7 +437,7 @@ public class ResExtractor
         }
 
         string savePath = dir + $"/{type}-{index}.{ext}";
-        if(ext == "pic")
+        if (ext == "pic")
         {
             savePath = dir + $"/{12}{type:D2}{index:D3}.{ext}";
         }
