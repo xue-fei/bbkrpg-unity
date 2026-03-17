@@ -12,7 +12,7 @@ public class EditorTools : MonoBehaviour
         System.Diagnostics.Process.Start(@Application.persistentDataPath);
     }
 
-    //[MenuItem("工具/生成游戏列表")]
+    [MenuItem("工具/生成游戏列表")]
     static void CreatGameListJson()
     {
         string path = Application.streamingAssetsPath + "/Game";
