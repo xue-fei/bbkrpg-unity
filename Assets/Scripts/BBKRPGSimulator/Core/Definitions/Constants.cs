@@ -20,9 +20,6 @@ namespace BBKRPGSimulator
         /// 屏幕宽度 160的倍数
         /// </summary>
         public const int SCREEN_WIDTH = 160;
-
-        public const int HEIGHT = 96;
-        public const int WIDTH = 160; 
         #endregion 字段
     }
 }

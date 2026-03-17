@@ -82,9 +82,6 @@ namespace BBKRPGSimulator.Graphics
         /// <param name="top">上坐标</param>
         public override void Draw(ImageBuilder imageBuilder, int left, int top)
         {
-            left += Constants.SCREEN_WIDTH / 2 - Constants.WIDTH / 2;
-            top += Constants.SCREEN_HEIGHT / 2 - Constants.HEIGHT / 2;
-
             byte[] simageByte = Data;
             byte[] dimageByte = imageBuilder.Data;
 
@@ -148,7 +145,7 @@ namespace BBKRPGSimulator.Graphics
                 int drawY = y1;
                 int drawEndX = x2;
                 int drawEndY = y2;
-                 
+
                 //横向偏移量
                 float hoffset = 0;
                 //纵向偏移量
@@ -178,7 +175,7 @@ namespace BBKRPGSimulator.Graphics
                     voffset = vlength > 0 ? -1 : 1;
                     step = vlength_abs;
                 }
-                 
+
                 //System.Diagnostics.Debug.WriteLine($"x1：{x1},y1：{y1}, x2：{x2}, y2：{y2}，step：{step}");
                 for (; step > 0; drawX = (int)(drawX + hoffset), drawY = (int)(drawY + voffset), step--)
                 {
