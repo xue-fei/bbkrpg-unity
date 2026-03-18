@@ -72,7 +72,9 @@ namespace BBKRPGSimulator.View
         {
             canvas.DrawColor(Constants.COLOR_WHITE);
             _menuImg.Draw(canvas, 1, _left, _top);
-            _cursors[_selectedIndex].Draw(canvas, 0, 0);
+            _cursors[_selectedIndex].Draw(canvas, 
+                (Constants.SCREEN_WIDTH-160)/2, 
+                (Constants.SCREEN_HEIGHT-96)/2);
         }
 
         public override void OnKeyDown(int key)
@@ -115,7 +117,8 @@ namespace BBKRPGSimulator.View
                 else
                 {
                     //TODO 这里如何实现？
-                    Context.ShowMessage("模拟器还未兼容该功能！！！", 1500);
+                    Context.ShowMessage("模拟器还未兼容该功能！！！", 1000);
+                    UnityEngine.Debug.LogWarning("模拟器还未兼容该功能！！！");
                 }
             }
             else if (key == SimulatorKeys.KEY_CANCEL)
