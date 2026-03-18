@@ -708,7 +708,7 @@ namespace BBKRPGSimulator.View.Combat
         /// <param name="scrr"></param>
         private void CreateBackgroundBitmap(int scrb, int scrl, int scrr)
         {
-            _background = Context.GraphicsFactory.NewImageBuilder(160, 96);
+            _background = Context.GraphicsFactory.NewImageBuilder(Constants.SCREEN_WIDTH, Constants.SCREEN_HEIGHT);
             ICanvas canvas = Context.GraphicsFactory.NewCanvas(_background); ;
 
             ResImage img = Context.LibData.GetImage(4, scrb);
@@ -720,13 +720,13 @@ namespace BBKRPGSimulator.View.Combat
             img = Context.LibData.GetImage(4, scrl);
             if (img != null)    // 左下角
             {
-                img.Draw(canvas, 1, 0, 96 - img.Height);
+                img.Draw(canvas, 1, 0, Constants.SCREEN_HEIGHT - img.Height);
             }
 
             img = Context.LibData.GetImage(4, scrr);
             if (img != null)    // 右上角
             {
-                img.Draw(canvas, 1, 160 - img.Width, 0);
+                img.Draw(canvas, 1, Constants.SCREEN_WIDTH - img.Width, 0);
             }
 
             _scrBottomIndex = scrb;

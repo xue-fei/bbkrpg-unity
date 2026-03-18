@@ -97,16 +97,16 @@ namespace BBKRPGSimulator.Script.Commands
                 _topImg = Context.LibData.GetImage(5, topImgIndex);
                 _bottomImg = Context.LibData.GetImage(5, bottomImgIndex);
                 _content = code.GetString(start + 4);
-                _curShowY = _bottomImg != null ? 96 - _bottomImg.Height : 96;
+                _curShowY = _bottomImg != null ? Constants.SCREEN_HEIGHT - _bottomImg.Height : Constants.SCREEN_HEIGHT;
 
                 int rectTop = _topImg != null ? _topImg.Height : 0;
-                _textArea = new Rectangle(0, rectTop, 160, _curShowY - rectTop);
+                _textArea = new Rectangle(0, rectTop, Constants.SCREEN_WIDTH, _curShowY - rectTop);
 
                 _skip = false;
                 _interval = 50;
                 _timeCount = 0;
                 _speed = 1;
-                _curShowY = _bottomImg != null ? 96 - _bottomImg.Height : 96;
+                _curShowY = _bottomImg != null ? Constants.SCREEN_HEIGHT - _bottomImg.Height : Constants.SCREEN_HEIGHT;
             }
 
             #endregion 构造函数
@@ -127,7 +127,7 @@ namespace BBKRPGSimulator.Script.Commands
                 }
                 if (_topImg != null)
                 {
-                    _bottomImg.Draw(canvas, 1, 0, 96 - _bottomImg.Height);
+                    _bottomImg.Draw(canvas, 1, 0, Constants.SCREEN_HEIGHT - _bottomImg.Height);
                 }
             }
 

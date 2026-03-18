@@ -197,7 +197,7 @@ namespace BBKRPGSimulator.Graphics.Util
             // 比r.top高的不画
             for (; y <= textArea.Top - 16 && i < buf.Length; y += 16)
             {
-                for (int x = 0; x < 160 && i < buf.Length;)
+                for (int x = 0; x < Constants.SCREEN_WIDTH && i < buf.Length;)
                 {
                     int t = (int)buf[i] & 0xFF;
                     if (t >= 0xa1)
@@ -221,7 +221,7 @@ namespace BBKRPGSimulator.Graphics.Util
             // 比r.bottom低的不画
             for (; y < textArea.Bottom && i < buf.Length; y += 16)
             {
-                for (int x = 0; x < 160 && i < buf.Length;)
+                for (int x = 0; x < Constants.SCREEN_WIDTH && i < buf.Length;)
                 {
                     int t = (int)buf[i] & 0xFF;
                     if (t >= 0xa1)
