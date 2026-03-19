@@ -201,7 +201,8 @@ namespace BBKRPGSimulator.View.Combat
             else if (_combatState == CombatState.Loss && _combatManage.IsRandomCombat)
             {
                 //			TextRender.drawText(canvas, "Loss", 20, 40);
-                _resFlyPeach.Draw(canvas, 0, 0);
+                _resFlyPeach.Draw(canvas, (Constants.SCREEN_WIDTH - 160) / 2,
+                (Constants.SCREEN_HEIGHT - 96) / 2);
             }
         }
 

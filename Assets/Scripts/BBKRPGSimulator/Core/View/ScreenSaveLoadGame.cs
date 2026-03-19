@@ -105,7 +105,9 @@ namespace BBKRPGSimulator.View
 
         public override void Draw(ICanvas canvas)
         {
-            _backgroudImage.Draw(canvas, 1, 0, 0);
+            _backgroudImage.Draw(canvas, 1,
+                (Constants.SCREEN_WIDTH - 160) / 2,
+                (Constants.SCREEN_HEIGHT - 96) / 2);
             for (int i = 0; i < _headImgs.Count; i++)
             {
                 for (int j = 0; j < _headImgs[i].Count; j++)
@@ -113,14 +115,19 @@ namespace BBKRPGSimulator.View
                     ResImage img = _headImgs[i][j];
                     if (img != null)
                     {
-                        img.Draw(canvas, 7, 8 + 20 * j, _textPos[i, 1] - 6);
+                        img.Draw(canvas, 7, 8 + 20 * j + (Constants.SCREEN_WIDTH - 160) / 2,
+                            _textPos[i, 1] - 6 + (Constants.SCREEN_HEIGHT - 96) / 2);
                     }
                 }
             }
-            TextRender.DrawText(canvas, _texts[0], _textPos[0, 0], _textPos[0, 1]);
-            TextRender.DrawText(canvas, _texts[1], _textPos[1, 0], _textPos[1, 1]);
-            TextRender.DrawText(canvas, _texts[2], _textPos[2, 0], _textPos[2, 1]);
-            TextRender.DrawSelText(canvas, _texts[_index], _textPos[_index, 0], _textPos[_index, 1]);
+            TextRender.DrawText(canvas, _texts[0], _textPos[0, 0] + (Constants.SCREEN_WIDTH - 160) / 2,
+                _textPos[0, 1] + (Constants.SCREEN_HEIGHT - 96) / 2);
+            TextRender.DrawText(canvas, _texts[1], _textPos[1, 0] + (Constants.SCREEN_WIDTH - 160) / 2,
+                _textPos[1, 1] + (Constants.SCREEN_HEIGHT - 96) / 2);
+            TextRender.DrawText(canvas, _texts[2], _textPos[2, 0] + (Constants.SCREEN_WIDTH - 160) / 2,
+                _textPos[2, 1] + (Constants.SCREEN_HEIGHT - 96) / 2);
+            TextRender.DrawSelText(canvas, _texts[_index], _textPos[_index, 0] + (Constants.SCREEN_WIDTH - 160) / 2,
+                _textPos[_index, 1] + (Constants.SCREEN_HEIGHT - 96) / 2);
         }
 
         public bool LoadGame(Stream stream)

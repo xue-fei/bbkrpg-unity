@@ -43,7 +43,8 @@ namespace BBKRPGSimulator.Combat.Actions
         {
             if (State == CombatAnimationState.Magic)
             {
-                Animation.Draw(canvas, 0, 0);
+                Animation.Draw(canvas, (Constants.SCREEN_WIDTH - 160) / 2,
+                (Constants.SCREEN_HEIGHT - 96) / 2);
             }
             else if (State == CombatAnimationState.End)
             {
