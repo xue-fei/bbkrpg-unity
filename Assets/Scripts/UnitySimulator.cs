@@ -2,6 +2,7 @@ using BBKRPGSimulator;
 using BBKRPGSimulator.Graphics;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 #if !UNITY_EDITOR && UNITY_WEBGL
@@ -71,9 +72,11 @@ public class UnitySimulator : MonoBehaviour
 
     void StartGame(string name)
     {
-        Application.targetFrameRate = 30;
+        Application.targetFrameRate = 60;
         Application.runInBackground = true;
         texture2D = new Texture2D(Constants.SCREEN_WIDTH, Constants.SCREEN_HEIGHT, TextureFormat.ARGB32, false);
+        texture2D.filterMode = FilterMode.Point;
+        texture2D.wrapMode = TextureWrapMode.Repeat;
         image.material.mainTexture = texture2D;
         _simulator = gameObject.AddComponent<RPGSimulator>();
         _simulator.RenderFrame += GameViewRenderFrame;
@@ -207,6 +210,60 @@ public class UnitySimulator : MonoBehaviour
                 invokeTime = currentTime;
             }
         }
+
+        if (Input.GetKeyDown(KeyCode.F12))
+        {
+            Texture2D flipped = FlipTexture(texture2D, true, false);
+            byte[] bytes = flipped.EncodeToPNG();
+            File.WriteAllBytes(
+                Application.persistentDataPath + "/"
+                + DateTime.Now.ToFileTime() + ".png"
+                , bytes);
+        }
+    }
+
+    /// <summary>
+    /// 翻转 Texture2D
+    /// </summary>
+    /// <param name="source">源纹理</param>
+    /// <param name="flipVertical">是否上下翻转</param>
+    /// <param name="flipHorizontal">是否左右翻转</param>
+    /// <returns>翻转后的新 Texture2D</returns>
+    private Texture2D FlipTexture(Texture2D source, bool flipVertical, bool flipHorizontal)
+    {
+        int width = source.width;
+        int height = source.height;
+
+        // 创建新纹理
+        Texture2D flipped = new Texture2D(width, height, source.format, false)
+        {
+            filterMode = source.filterMode,
+            wrapMode = source.wrapMode
+        };
+
+        // 获取像素
+        Color[] pixels = source.GetPixels();
+        Color[] flippedPixels = new Color[pixels.Length];
+
+        // 翻转处理
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                // 计算源坐标（根据翻转方向）
+                int srcX = flipHorizontal ? (width - 1 - x) : x;
+                int srcY = flipVertical ? (height - 1 - y) : y;
+
+                // 复制像素
+                flippedPixels[y * width + x] = pixels[srcY * width + srcX];
+            }
+        }
+
+        // 应用像素
+        flipped.SetPixels(flippedPixels);
+        flipped.Apply();
+
+        return flipped;
     }
 
     private void RepeatKey(KeyCode keyCode)

@@ -75,15 +75,15 @@ namespace BBKRPGSimulator.Lib
             //File.WriteAllBytes(UnityEngine.Application.streamingAssetsPath + "/" +Type+"-"+ Index + ".gut", ScriptData);
 
             // 计算完整资源块长度（头部 + 数据段）
-            int totalLen = 0x1b + NumSceneEvent * 2 + len;
+            //int totalLen = 0x1b + NumSceneEvent * 2 + len;
 
-            // 从原始 buf 复制完整块，避免被其他资源的解析污染
-            byte[] rawBlock = new byte[totalLen];
-            Array.Copy(buf, offset, rawBlock, 0, totalLen);
+            //// 从原始 buf 复制完整块，避免被其他资源的解析污染
+            //byte[] rawBlock = new byte[totalLen];
+            //Array.Copy(buf, offset, rawBlock, 0, totalLen);
 
-            string savePath = UnityEngine.Application.streamingAssetsPath
-                            + $"/{Type}-{Index}.gut";
-            File.WriteAllBytes(savePath, rawBlock);
+            //string savePath = UnityEngine.Application.streamingAssetsPath
+            //                + $"/{Type}-{Index}.gut";
+            //File.WriteAllBytes(savePath, rawBlock);
         }
 
         #endregion 方法

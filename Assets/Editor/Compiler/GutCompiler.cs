@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
@@ -115,7 +114,7 @@ public class GutCompiler
     {
         gb2312 = new CP936();
 
-        string srcDir = Application.dataPath + "/../ExRes/gut_src";
+        string srcDir = Application.dataPath + "/../ExRes/gut_src_new";
         string outDir = Application.dataPath + "/../ExRes/gut_test";
 
         if (!Directory.Exists(srcDir))

@@ -277,9 +277,22 @@ namespace BBKRPGSimulator
             MapScreenPos.X = x;
             MapScreenPos.Y = y;
 
+            //MapScreenPos.X -= 10;
+            //MapScreenPos.Y -= 6;
+            //if(MapScreenPos.X<0)
+            //{
+            //    MapScreenPos.X = 0;
+            //}
+            //if (MapScreenPos.Y < 0)
+            //{
+            //    MapScreenPos.Y = 0;
+            //}
+
+            UnityEngine.Debug.LogWarning("MapScreenPos.X:" + MapScreenPos.X + ", MapScreenPos.Y:" + MapScreenPos.Y);
             //TODO 判断Player？
             if (point != Point.Empty && playerCharacter != null)
             {
+                UnityEngine.Debug.LogWarning("point.X:" + point.X + ", point.Y:" + point.Y);
                 playerCharacter.SetPosOnScreen(point.X, point.Y, MapScreenPos);
             }
 

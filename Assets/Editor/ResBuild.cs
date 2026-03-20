@@ -93,7 +93,7 @@ public class ResBuild
     public static void Build()
     {
         string exResDir = Application.dataPath + "/../ExRes";
-        string outPath = Application.dataPath + "/../ExRes/output.lib";
+        string outPath = Application.streamingAssetsPath + "/Game/伏魔记经典版改.lib";
 
         if (!Directory.Exists(exResDir))
         {
@@ -112,6 +112,7 @@ public class ResBuild
         {
             Debug.LogError($"[ResBuild] 打包异常: {e}");
         }
+        EditorTools.CreatGameListJson();
     }
 
     // ══════════════════════════════════════════════════════

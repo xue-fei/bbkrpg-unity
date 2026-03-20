@@ -13,7 +13,7 @@ public class EditorTools : MonoBehaviour
     }
 
     [MenuItem("工具/生成游戏列表")]
-    static void CreatGameListJson()
+    public static void CreatGameListJson()
     {
         string path = Application.streamingAssetsPath + "/Game";
         DirectoryInfo root = new DirectoryInfo(path);
