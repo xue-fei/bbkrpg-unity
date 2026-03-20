@@ -203,21 +203,16 @@ public class GutDres
             }
             catch (Exception ex)
             {
-                // 越界时：输出已解析内容 + 剩余字节的十六进制转储，供调试
                 sb.AppendLine($"@ ERROR at script+{scriptPos - 1} opcode=0x{opcode:X2}: {ex.Message}");
-                sb.AppendLine($"@ Remaining bytes (pos={pos} scriptEnd={scriptEnd}):");
-                var hexDump = new System.Text.StringBuilder("@  ");
-                for (int di = pos; di < scriptEnd && di < data.Length; di++)
-                    hexDump.Append($" {data[di]:X2}");
-                sb.AppendLine(hexDump.ToString());
-                // 转储从 scriptStart 开始的原始字节用于全局分析
-                sb.AppendLine($"@ Full script hex dump (scriptStart={scriptStart} scriptEnd={scriptEnd}):");
+                sb.AppendLine($"@ pos={pos} scriptEnd={scriptEnd} dataLen={data.Length} scriptPos={scriptPos}");
+                sb.AppendLine($"@ Full script hex dump (scriptStart={scriptStart} scriptEnd={scriptEnd} dataLen={data.Length}):");
                 var fullDump = new System.Text.StringBuilder("@  ");
-                for (int di = scriptStart; di < scriptEnd && di < data.Length; di++)
+                for (int di = scriptStart; di < Math.Min(scriptEnd, data.Length); di++)
                     fullDump.Append($" {data[di]:X2}");
                 sb.AppendLine(fullDump.ToString());
+                sb.AppendLine($"@ length_field={data[0x18] | (data[0x19] << 8)} numSceneEvent={data[0x1A]} scriptStart={scriptStart} scriptDataOffset={scriptDataOffset}");
                 File.WriteAllText(outPath, sb.ToString(), gb2312);
-                throw; // 仍然抛出让调用方记录错误
+                throw;
             }
 
             if (line != null)
@@ -404,12 +399,19 @@ public class GutDres
                         break;
                     }
 
-                // 0x1C Buy U — 单字节 0x00 终止
+                // 0x1C Buy U — 兼容单字节和u16(0)两种终止格式
                 case 0x1C:
                     while (pos < scriptEnd)
                     {
-                        if (data[pos] == 0x00) { pos++; break; } // 单字节终止
-                        pos += 2; // 跳过 u16 数据
+                        if (data[pos] == 0x00)
+                        {
+                            if (pos + 1 < scriptEnd && data[pos + 1] == 0x00)
+                                pos += 2; // u16(0) 双字节终止
+                            else
+                                pos += 1; // 单字节终止
+                            break;
+                        }
+                        pos += 2;
                     }
                     break;
 
@@ -531,44 +533,44 @@ public class GutDres
             case 0x33: return $"BoxOpen {ReadU16Adv(data, ref pos, ref scriptPos, limit)}";
 
             // ── N×2 ─────────────────────────────────────────
-            case 0x00: return ReadNN("Music", data, ref pos, ref scriptPos);
-            case 0x08: return ReadNN("ActorSpeed", data, ref pos, ref scriptPos);
-            case 0x0C: return ReadNN("Set", data, ref pos, ref scriptPos);
-            case 0x0E: return ReadNN("StartChapter", data, ref pos, ref scriptPos);
-            case 0x10: return ReadNN("ScreenS", data, ref pos, ref scriptPos);
-            case 0x16: return ReadNN("Add", data, ref pos, ref scriptPos);
-            case 0x17: return ReadNN("Sub", data, ref pos, ref scriptPos);
-            case 0x1D: return ReadNN("FaceToFace", data, ref pos, ref scriptPos);
-            case 0x22: return ReadNN("GainGoods", data, ref pos, ref scriptPos);
-            case 0x2E: return ReadNN("NpcMoveMod", data, ref pos, ref scriptPos);
-            case 0x31: return ReadNN("ResumeActorHp", data, ref pos, ref scriptPos);
-            case 0x32: return ReadNN("ActorLayerUp", data, ref pos, ref scriptPos);
-            case 0x42: return ReadNN("CallChapter", data, ref pos, ref scriptPos);
-            case 0x49: return ReadNN("SetEventTimer", data, ref pos, ref scriptPos);
-            case 0x4C: return ReadNN("SetTo", data, ref pos, ref scriptPos);
+            case 0x00: return ReadNN("Music", data, ref pos, ref scriptPos, limit);
+            case 0x08: return ReadNN("ActorSpeed", data, ref pos, ref scriptPos, limit);
+            case 0x0C: return ReadNN("Set", data, ref pos, ref scriptPos, limit);
+            case 0x0E: return ReadNN("StartChapter", data, ref pos, ref scriptPos, limit);
+            case 0x10: return ReadNN("ScreenS", data, ref pos, ref scriptPos, limit);
+            case 0x16: return ReadNN("Add", data, ref pos, ref scriptPos, limit);
+            case 0x17: return ReadNN("Sub", data, ref pos, ref scriptPos, limit);
+            case 0x1D: return ReadNN("FaceToFace", data, ref pos, ref scriptPos, limit);
+            case 0x22: return ReadNN("GainGoods", data, ref pos, ref scriptPos, limit);
+            case 0x2E: return ReadNN("NpcMoveMod", data, ref pos, ref scriptPos, limit);
+            case 0x31: return ReadNN("ResumeActorHp", data, ref pos, ref scriptPos, limit);
+            case 0x32: return ReadNN("ActorLayerUp", data, ref pos, ref scriptPos, limit);
+            case 0x42: return ReadNN("CallChapter", data, ref pos, ref scriptPos, limit);
+            case 0x49: return ReadNN("SetEventTimer", data, ref pos, ref scriptPos, limit);
+            case 0x4C: return ReadNN("SetTo", data, ref pos, ref scriptPos, limit);
 
             // ── N×3 ─────────────────────────────────────────
-            case 0x02: return ReadNx("CreateActor", 3, data, ref pos, ref scriptPos);
-            case 0x06: return ReadNx("Move", 3, data, ref pos, ref scriptPos);
-            case 0x2C: return ReadNx("LearnMagic", 3, data, ref pos, ref scriptPos);
-            case 0x35: return ReadNx("NpcStep", 3, data, ref pos, ref scriptPos);
-            case 0x3B: return ReadNx("AttribSet", 3, data, ref pos, ref scriptPos);
-            case 0x3C: return ReadNx("AttribAdd", 3, data, ref pos, ref scriptPos);
+            case 0x02: return ReadNx("CreateActor", 3, data, ref pos, ref scriptPos, limit);
+            case 0x06: return ReadNx("Move", 3, data, ref pos, ref scriptPos, limit);
+            case 0x2C: return ReadNx("LearnMagic", 3, data, ref pos, ref scriptPos, limit);
+            case 0x35: return ReadNx("NpcStep", 3, data, ref pos, ref scriptPos, limit);
+            case 0x3B: return ReadNx("AttribSet", 3, data, ref pos, ref scriptPos, limit);
+            case 0x3C: return ReadNx("AttribAdd", 3, data, ref pos, ref scriptPos, limit);
 
             // ── N×4 ─────────────────────────────────────────
-            case 0x01: return ReadNx("LoadMap", 4, data, ref pos, ref scriptPos);
-            case 0x20: return ReadNx("CreateBox", 4, data, ref pos, ref scriptPos);
-            case 0x26: return ReadNx("CreateNpc", 4, data, ref pos, ref scriptPos);
+            case 0x01: return ReadNx("LoadMap", 4, data, ref pos, ref scriptPos, limit);
+            case 0x20: return ReadNx("CreateBox", 4, data, ref pos, ref scriptPos, limit);
+            case 0x26: return ReadNx("CreateNpc", 4, data, ref pos, ref scriptPos, limit);
 
             // ── N×5 ─────────────────────────────────────────
-            case 0x1E: return ReadNx("Movie", 5, data, ref pos, ref scriptPos);
+            case 0x1E: return ReadNx("Movie", 5, data, ref pos, ref scriptPos, limit);
 
             // ── N×6 ─────────────────────────────────────────
-            case 0x04: return ReadNx("MapEvent", 6, data, ref pos, ref scriptPos);
-            case 0x07: return ReadNx("ActorMove", 6, data, ref pos, ref scriptPos);
+            case 0x04: return ReadNx("MapEvent", 6, data, ref pos, ref scriptPos, limit);
+            case 0x07: return ReadNx("ActorMove", 6, data, ref pos, ref scriptPos, limit);
 
             // ── N×11 ────────────────────────────────────────
-            case 0x23: return ReadNx("InitFight", 11, data, ref pos, ref scriptPos);
+            case 0x23: return ReadNx("InitFight", 11, data, ref pos, ref scriptPos, limit);
 
             // ── L (u32) ─────────────────────────────────────
             case 0x29: return $"GainMoney {ReadU32Adv(data, ref pos, ref scriptPos, limit)}";
@@ -675,15 +677,26 @@ public class GutDres
                 }
 
             // ── 0x1C Buy U ───────────────────────────────────
-            // 终止符是单字节 0x00（引擎 peek 一字节判断，非 u16）
+            // 终止符兼容两种格式：
+            //   原始游戏文件：单字节 0x00 终止（引擎原生格式）
+            //   GutCompiler生成：u16(0x0000) 两字节终止
+            // 策略：遇到 0x00 时，若下一字节也是 0x00 则跳2字节，否则跳1字节
             case 0x1C:
                 {
                     var items = new List<int>();
                     int cap = Math.Min(data.Length, limit);
                     while (pos < cap)
                     {
-                        if (data[pos] == 0x00) { pos++; scriptPos++; break; } // 单字节终止
-                        if (pos + 2 > cap) break; // 数据不足，防止越界
+                        if (data[pos] == 0x00)
+                        {
+                            // 判断是单字节终止还是u16(0)终止
+                            if (pos + 1 < cap && data[pos + 1] == 0x00)
+                            { pos += 2; scriptPos += 2; } // u16(0) 双字节终止
+                            else
+                            { pos += 1; scriptPos += 1; } // 单字节终止
+                            break;
+                        }
+                        if (pos + 2 > cap) break;
                         items.Add(ReadU16Adv(data, ref pos, ref scriptPos, limit));
                     }
                     return $"Buy \"{string.Join(" ", items)}\"";
@@ -827,18 +840,18 @@ public class GutDres
     }
 
     // ── 便捷格式化 ────────────────────────────────────────────
-    static string ReadNN(string name, byte[] data, ref int pos, ref int scriptPos)
+    static string ReadNN(string name, byte[] data, ref int pos, ref int scriptPos, int limit = int.MaxValue)
     {
-        int n1 = ReadU16Adv(data, ref pos, ref scriptPos);
-        int n2 = ReadU16Adv(data, ref pos, ref scriptPos);
+        int n1 = ReadU16Adv(data, ref pos, ref scriptPos, limit);
+        int n2 = ReadU16Adv(data, ref pos, ref scriptPos, limit);
         return $"{name} {n1} {n2}";
     }
 
-    static string ReadNx(string name, int count, byte[] data, ref int pos, ref int scriptPos)
+    static string ReadNx(string name, int count, byte[] data, ref int pos, ref int scriptPos, int limit = int.MaxValue)
     {
         var sb = new StringBuilder(name);
         for (int i = 0; i < count; i++)
-            sb.Append(' ').Append(ReadU16Adv(data, ref pos, ref scriptPos));
+            sb.Append(' ').Append(ReadU16Adv(data, ref pos, ref scriptPos, limit));
         return sb.ToString();
     }
 }
